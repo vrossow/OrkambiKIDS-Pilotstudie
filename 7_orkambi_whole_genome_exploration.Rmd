@@ -1,0 +1,867 @@
+---
+title: "OrkambiKIDS Whole-Genome Explorations"
+author: "Virginia Rossow"
+output: 
+  html_document:
+    code_folding: show
+    number_sections: yes
+    smart: no
+    toc: yes
+    df_print: paged
+    toc_float: yes
+---
+
+# Exploration
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages}
+
+library(pacman)
+
+pacman::p_load(knitr, tidyverse, janitor, broom, phyloseq, ggsignif, vegan, ggpubr)
+
+```
+
+```{r load tables, include=FALSE}
+
+
+# read tables
+wg_phylum_tbl <- read_delim("flipped_phylum_orkambi.csv", delim = NULL, col_names = TRUE, col_types = NULL)
+
+# read rds with phyloseq inside
+ps_wgs_work <- readRDS("wgs_orkambi_trimmed.rds")
+ps_wgs_work_rel <- readRDS("wgs_orkambi_trimmed_relative.rds")
+
+
+```
+
+
+```{r prep try 2, include=FALSE}
+
+wg_phylum_tbl <- wg_phylum_tbl %>% select(-c(...1))
+
+my_colors_material_wgs <- c("steelblue1", "lightgreen", "brown1")
+names(my_colors_material_wgs) <- c("sputum", "throat", "stool")
+
+my_colors_id <- c("aquamarine3", "skyblue1", "darkgoldenrod1", "firebrick2", "chartreuse3", "sienna1", "palevioletred2", "royalblue3")
+names(my_colors_id) <- c("1", "2", "3", "4", "5", "6", "7", "8")
+
+my_colors_visit <- c("darkorchid4", "mediumorchid2", "orchid1", "plum", "pink2", "hotpink2", "violetred1", "maroon3", "deeppink4")
+names(my_colors_visit) <- c("1", "2", "3", "4", "5", "6", "7", "8", "9")
+
+```
+
+
+## Read Counts
+
+```{r read count summary}
+
+#under 100 reads per sample -> 15 samples, mostly sputum
+wg_phylum_tbl %>%
+  select(c(sample_names, total_reads)) %>%
+  filter(total_reads <50)
+
+#summary for each material
+
+# sputum
+wg_phylum_tbl %>% 
+  filter(total_reads > 50) %>%
+  filter(material == "sputum") %>%
+  select(total_reads) %>%
+  summary()
+
+# throat
+wg_phylum_tbl %>% 
+  filter(total_reads > 50) %>%
+  filter(material == "throat") %>%
+  select(total_reads) %>%
+  summary()
+
+# stool
+wg_phylum_tbl %>% 
+  filter(total_reads > 50) %>%
+  filter(material == "stool") %>%
+  select(total_reads) %>%
+  summary()
+
+
+```
+
+
+
+```{r read counts plots}
+
+wg_phylum_tbl$material <- factor(wg_phylum_tbl$material, levels = c("sputum", "throat", "stool"), ordered = TRUE)
+
+# all materials
+wg_phylum_tbl %>%
+  filter(total_reads > 50) %>%
+  filter(!grepl('10|11|12|13', sample_names)) %>%
+  select(c(material, total_reads)) %>%
+  ggplot(., aes(x = material, y = total_reads, fill= material)) +
+  geom_boxplot() +
+  scale_fill_manual(name = "material", values = my_colors_material_wgs) +
+  theme_bw()
+
+# sputum
+wg_phylum_tbl %>%
+  filter(total_reads > 50) %>%
+  select(c(material, total_reads)) %>%
+  filter(material == "sputum") %>%
+  ggplot(., aes(x = material, y = total_reads)) +
+  geom_boxplot(fill = "steelblue1")
+
+# throat
+wg_phylum_tbl %>%
+  filter(total_reads > 50) %>%
+  select(c(material, total_reads)) %>%
+  filter(material == "throat") %>%
+  ggplot(., aes(x = material, y = total_reads, fill = material)) +
+  geom_boxplot(fill = "lightgreen")
+
+# stool
+wg_phylum_tbl %>%
+  filter(total_reads > 50) %>%
+  select(c(material, total_reads)) %>%
+  filter(material == "stool") %>%
+  ggplot(., aes(x = material, y = total_reads, fill = material)) +
+  geom_boxplot(fill = "brown1")
+
+```
+
+## General Exploration
+
+```{r wgs exploration}
+
+sample_sums(ps_wgs_work)
+
+hist(sample_sums(ps_wgs_work), breaks = 15)
+
+```
+
+
+```{r ordination}
+
+plot_ordination(ps_wgs_work, ordinate(ps_wgs_work, "MDS"), color = "material") + 
+  geom_point(size = 3) +
+  theme_bw() +
+  #ggtitle("Taxa by material") +
+  scale_colour_manual(name = "material", values = my_colors_material_wgs)
+
+# NMDS
+plot_ord_data_wgs <- ordinate(ps_wgs_work_rel, "NMDS", "bray")
+plot_ordination(ps_wgs_work_rel, plot_ord_data_wgs, type="samples", color = "material", title="Samples") +
+  scale_colour_manual(name = "material", values = my_colors_material_wgs)
+
+
+```
+
+```{r boxplots by timepoints}
+
+ps_wgs_vx_s <- subset_samples(ps_wgs_work, material == "sputum")
+ps_wgs_vx_s <- subset_samples(ps_wgs_vx_s, visit_2 == "baseline" | visit_2 == "start" | visit_2 == "mid" | visit_2 == "end")
+
+ps_wgs_vx_t <- subset_samples(ps_wgs_work, material == "throat")
+ps_wgs_vx_t <- subset_samples(ps_wgs_vx_t, visit_2 == "baseline" | visit_2 == "start" | visit_2 == "mid" | visit_2 == "end")
+
+ps_wgs_vx_st <- subset_samples(ps_wgs_work, material == "stool")
+ps_wgs_vx_st <- subset_samples(ps_wgs_vx_st, visit_2 == "baseline" | visit_2 == "start" | visit_2 == "mid" | visit_2 == "end")
+
+
+my_comparisons <- list(c("baseline", "start"), c("baseline", "mid"), c("baseline", "end"))
+
+sample_data(ps_wgs_work)$material <- factor(sample_data(ps_wgs_work)$material, levels = c("sputum", "throat", "stool"), ordered = TRUE)
+
+plot_richness(ps_wgs_work, x = "material", color = "material", measures = c("Observed", "Shannon", "Simpson")) + 
+  geom_boxplot(aes(color = material)) + 
+  theme_bw() +
+  geom_point(position = position_dodge(width = 0.75)) +
+  scale_colour_manual(name = "material", values = my_colors_material_wgs) +
+  stat_compare_means(comparison=list(c("stool", "throat"), c("stool", "sputum"), c("throat", "sputum")), method="wilcox.test", p.adjust.method="BH", label = "p.signif") +
+  #ggtitle("Alpha-Diversity (all materials)") +
+  theme(legend.position = "none")
+
+# sputum
+plot_richness(ps_wgs_vx_s, x = "visit_2", color = "visit_2", measures = c("Observed", "Shannon", "Simpson")) + 
+  geom_boxplot(aes(color = visit_2)) + 
+  geom_point(position = position_dodge(width = 0.75)) +
+  theme_bw() +
+  #ggtitle("Alpha-Diversity (sputum)") +
+  #geom_line() +
+  theme(legend.position = "none") +
+  xlab("throat timepoints") +
+  stat_compare_means(comparison=my_comparisons, method="wilcox.test", p.adjust.method="BH", label = "p.signif")
+
+
+# throat
+plot_richness(ps_wgs_vx_t, x = "visit_2", color = "visit_2", measures = c("Observed", "Shannon", "Simpson")) + 
+  geom_boxplot(aes(color = visit_2)) + 
+  geom_point(position = position_dodge(width = 0.75)) +
+  theme_bw() +
+  #ggtitle("Alpha-Diversity (throat)") +
+  #geom_line() +
+  theme(legend.position = "none") +
+  xlab("throat timepoints") +
+  stat_compare_means(comparison=my_comparisons, method="wilcox.test", p.adjust.method="BH", label = "p.signif")
+
+# stool
+plot_richness(ps_wgs_vx_st, x = "visit_2", color = "visit_2", measures = c("Observed", "Shannon", "Simpson")) + 
+  geom_boxplot(aes(color = visit_2)) + 
+  geom_point(position = position_dodge(width = 0.75)) +
+  theme_bw() +
+  #ggtitle("Alpha-Diversity (stool)") +
+  #geom_line() +
+  theme(legend.position = "none") +
+  xlab("throat timepoints") +
+  stat_compare_means(comparison=my_comparisons, method="wilcox.test", p.adjust.method="BH", label = "p.signif")
+
+
+
+```
+
+## By Material
+
+```{r subset by material}
+
+## subset by material
+# sputum ps
+ps_wgs_sputum <- subset_samples(ps_wgs_work, material == "sputum")
+ps_wgs_sputum_rel <- transform_sample_counts(ps_wgs_sputum , function(x) x/sum(x) )
+
+rarecurve(otu_table(ps_wgs_sputum), step=50, cex=0.5)
+
+# throat ps
+ps_wgs_throat <- subset_samples(ps_wgs_work, material == "throat")
+ps_wgs_throat_rel <- transform_sample_counts(ps_wgs_throat , function(x) x/sum(x) )
+
+rarecurve(otu_table(ps_wgs_throat), step=50, cex=0.5)
+
+# stool ps
+ps_wgs_stool <- subset_samples(ps_wgs_work, material == "stool")
+ps_wgs_stool_rel <- transform_sample_counts(ps_wgs_stool , function(x) x/sum(x) )
+
+rarecurve(otu_table(ps_wgs_stool), step=50, cex=0.5)
+
+### maybe rarefy by material ?
+
+
+## timepoints for small boxplots
+ps_wgs_timepoints <- subset_samples(ps_wgs_work, !is.na(visit_2))
+
+ps_wgs_timepoints_sp <- subset_samples(ps_wgs_timepoints, material == "sputum")
+ps_wgs_timepoints_th <- subset_samples(ps_wgs_timepoints, material == "throat")
+ps_wgs_timepoints_st <- subset_samples(ps_wgs_timepoints, material == "stool")
+
+```
+
+
+### Sputum
+
+```{r wgs sputum}
+
+# overview -> weniger reads und sample als bei 16S
+nsamples(ps_wgs_sputum)
+ntaxa(ps_wgs_sputum)
+min(otu_table(ps_wgs_sputum, TotalReads))
+max(otu_table(ps_wgs_sputum, TotalReads))
+
+#get_taxa_unique(ps_wgs_sputum, "phylum") # warum geht das nicht ???
+
+### Alpha Diversity
+# richness table
+estimate_richness(ps_wgs_sputum, split = FALSE, measures = c("Observed", "Shannon", "Simpson"))
+
+plot_richness(ps_wgs_sputum, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  scale_colour_manual(values = my_colors_id)
+
+### Bar Plots
+
+plot_bar(otu_table(ps_wgs_sputum, TotalReads))+
+  scale_y_log10() +
+  ylab("Relative Abundance")
+
+plot_bar(ps_wgs_sputum_rel, fill="Phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Phylum Level (by id)")
+
+TopNOTUs_wgs_rel_sp <- names(sort(taxa_sums(ps_wgs_sputum_rel), TRUE)[1:25])
+ent15_wgs_rel_sp <- prune_taxa(TopNOTUs_wgs_rel_sp, ps_wgs_sputum_rel)
+
+TopNOTUs_wgs_rel_sp_10 <- names(sort(taxa_sums(ps_wgs_sputum_rel), TRUE)[1:13]) # 12
+ent15_wgs_rel_sp_10 <- prune_taxa(TopNOTUs_wgs_rel_sp_10, ps_wgs_sputum_rel)
+
+# phylum
+plot_bar(ent15_wgs_rel_sp, fill="Phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") #+
+  #ggtitle("Sputum Samples on Phylum Level (by id)")
+
+plot_bar(ent15_wgs_rel_sp, fill="Phylum") +
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") #+
+ # ggtitle("Sputum Samples on Phylum Level (by visit)")
+
+# genus
+plot_bar(ent15_wgs_rel_sp_10, fill="Genus") +
+  facet_wrap(~id, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Sputum Samples")
+  #ggtitle("Sputum Samples on Genus Level (by id)")
+plot_bar(ent15_wgs_rel_sp_10, fill="Genus") +
+  facet_wrap(~visit, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Sputum Samples")
+  #ggtitle("Sputum Samples on Genus Level (by visit)")
+
+# species ----> titel sind irgendwie zu lang
+plot_bar(ent15_wgs_rel_sp_10, fill="Species") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Species Level")
+
+plot_bar(ent15_wgs_rel_sp_10, fill="Species") +
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Species Level")
+
+### ordination - beta-diversity
+# PCoA plot using the unweighted UniFrac as distance
+ordination_wgs_sp <- ordinate(ps_wgs_sputum, method="PCoA")
+
+plot_ordination(ps_wgs_sputum, ordination_wgs_sp, color="visit") + 
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Visits") +
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_visit) +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ordination(ps_wgs_sputum, ordination_wgs_sp, color = "id") + 
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_id) +
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Patient IDs") +
+  stat_ellipse() +
+  theme_bw()
+
+
+plot_ord_wgs_sp <- ordinate(ps_wgs_sputum_rel, "NMDS", "bray")
+plot_ordination(ps_wgs_sputum_rel, plot_ord_wgs_sp, type="taxa", color = "Phylum", title="Taxa")
+plot_ordination(ps_wgs_sputum_rel, plot_ord_wgs_sp, type = "samples", color = "id", title="Samples by id") +
+    scale_colour_manual(values = my_colors_id) +
+  stat_ellipse()
+
+
+```
+
+#### Sputum Statistics
+
+```{r sputum statistics}
+
+# observed otus differ greatly between visits? or patients?
+rich_wgs_sputum <- estimate_richness(ps_wgs_sputum, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_wgs_sputum$Observed, sample_data(ps_wgs_sputum)$id,  p.adjust.method = "BH") # no
+pairwise.wilcox.test(rich_wgs_sputum$Observed, sample_data(ps_wgs_sputum)$visit,  p.adjust.method = "BH") # no
+
+pairwise.wilcox.test(rich_wgs_sputum$Shannon, sample_data(ps_wgs_sputum)$id,  p.adjust.method = "BH") # 6 and 3
+pairwise.wilcox.test(rich_wgs_sputum$Shannon, sample_data(ps_wgs_sputum)$visit,  p.adjust.method = "BH") # no
+
+pairwise.wilcox.test(rich_wgs_sputum$Simpson, sample_data(ps_wgs_sputum)$id,  p.adjust.method = "BH") # 6 and 3
+pairwise.wilcox.test(rich_wgs_sputum$Simpson, sample_data(ps_wgs_sputum)$visit,  p.adjust.method = "BH") # no
+
+# Permanovas
+
+metadata_wgs_sputum <- as(sample_data(ps_wgs_sputum_rel),"data.frame")
+features_wgs_sputum <- as.data.frame(t(otu_table(ps_wgs_sputum_rel)))
+
+vegan::adonis2(features_wgs_sputum ~ visit + bmi_perz + id + pp_fev1,data=metadata_wgs_sputum, permutations = 999, na.action=na.exclude, method = "bray") %>% tidy()
+
+# adonis(wunifrac_dist ~ sample_data(ps.rarefied)$Season) maybe?
+# https://micca.readthedocs.io/en/latest/phyloseq.html
+
+```
+
+
+### Throat
+
+```{r wgs throat}
+
+
+# overview -> weniger reads und sample als bei 16S
+nsamples(ps_wgs_throat)
+ntaxa(ps_wgs_throat)
+min(otu_table(ps_wgs_throat, TotalReads))
+max(otu_table(ps_wgs_throat, TotalReads))
+
+#get_taxa_unique(ps_wgs_throat, "phylum") # warum geht das nicht ???
+
+### Alpha Diversity
+
+# richness table
+estimate_richness(ps_wgs_throat, split = FALSE, measures = c("Observed", "Shannon", "Simpson"))
+
+plot_richness(ps_wgs_throat, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  scale_colour_manual(values = my_colors_id)
+
+
+## bar plots
+
+plot_bar(otu_table(ps_wgs_throat, TotalReads))+
+  scale_y_log10() +
+  ylab("Relative Abundance")
+
+plot_bar(ps_wgs_throat_rel, fill="Phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Throat Samples on Phylum Level (by id)")
+
+TopNOTUs_wgs_rel_th <- names(sort(taxa_sums(ps_wgs_throat_rel), TRUE)[1:25])
+ent15_wgs_rel_th <- prune_taxa(TopNOTUs_wgs_rel_th, ps_wgs_throat_rel)
+
+TopNOTUs_wgs_rel_th_10 <- names(sort(taxa_sums(ps_wgs_throat_rel), TRUE)[1:12])
+ent15_wgs_rel_th_10 <- prune_taxa(TopNOTUs_wgs_rel_th_10, ps_wgs_throat_rel)
+tax_table(ent15_wgs_rel_th_10)
+
+# phylum
+plot_bar(ent15_wgs_rel_th, fill="Phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Throat Samples on Phylum Level (by id)")
+
+plot_bar(ent15_wgs_rel_th, fill="Phylum") +
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Throat Samples on Phylum Level (by visit)")
+
+# genus
+plot_bar(ent15_wgs_rel_th_10, fill="Genus") +
+  facet_wrap(~id, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Throat Samples")
+  #ggtitle("Throat Samples on Genus Level (by id)")
+plot_bar(ent15_wgs_rel_th_10, fill="Genus") +
+  facet_wrap(~visit, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Throat Samples")
+ # ggtitle("Throat Samples on Genus Level (by visit)")
+
+## Ordination - Beta-Diversity
+# PCoA plot using the unweighted UniFrac as distance
+ordination_wgs_th <- ordinate(ps_wgs_throat, method="PCoA")
+
+plot_ordination(ps_wgs_throat, ordination_wgs_th, color="visit") + 
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Visits") +
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_visit) +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ordination(ps_wgs_throat, ordination_wgs_th, color = "id") + 
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_id) +
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Patient IDs") +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ord_wgs_th <- ordinate(ps_wgs_throat_rel, "NMDS", "bray")
+plot_ordination(ps_wgs_throat_rel, plot_ord_wgs_th, type="taxa", color = "Phylum", title="Taxa")
+plot_ordination(ps_wgs_throat_rel, plot_ord_wgs_th, type = "samples", color = "id", title="Samples by id") +
+    scale_colour_manual(values = my_colors_id) +
+  stat_ellipse()
+
+
+```
+
+#### Troat Statistics
+
+```{r throat statistics}
+
+# observed otus differ greatly between visits? or patients?
+rich_wgs_throat <- estimate_richness(ps_wgs_throat, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_wgs_throat$Observed, sample_data(ps_wgs_throat)$id,  p.adjust.method = "BH") # no
+pairwise.wilcox.test(rich_wgs_throat$Observed, sample_data(ps_wgs_throat)$visit,  p.adjust.method = "BH") # no
+
+pairwise.wilcox.test(rich_wgs_throat$Shannon, sample_data(ps_wgs_throat)$id,  p.adjust.method = "BH") # no
+pairwise.wilcox.test(rich_wgs_throat$Shannon, sample_data(ps_wgs_throat)$visit,  p.adjust.method = "BH") # no
+
+pairwise.wilcox.test(rich_wgs_throat$Simpson, sample_data(ps_wgs_throat)$id,  p.adjust.method = "BH") # no
+pairwise.wilcox.test(rich_wgs_throat$Simpson, sample_data(ps_wgs_throat)$visit,  p.adjust.method = "BH") # no
+
+
+# Permanovas
+
+metadata_wgs_throat <- as(sample_data(ps_wgs_throat_rel),"data.frame")
+features_wgs_throat <- as.data.frame(t(otu_table(ps_wgs_throat_rel)))
+
+vegan::adonis2(features_wgs_throat ~ visit + bmi_perz + id + pp_fev1,data=metadata_wgs_throat, permutations = 999, na.action=na.exclude, method = "bray") %>% tidy()
+
+```
+
+
+### Stool
+
+```{r wgs stool}
+
+
+# overview -> weniger reads und sample als bei 16S
+nsamples(ps_wgs_stool)
+ntaxa(ps_wgs_stool)
+min(otu_table(ps_wgs_stool, TotalReads))
+max(otu_table(ps_wgs_stool, TotalReads))
+
+#get_taxa_unique(ps_wgs_stool, "phylum") # warum geht das nicht ???
+
+### Alpha Diversity
+
+# richness table
+estimate_richness(ps_wgs_stool, split = FALSE, measures = c("Observed", "Shannon", "Simpson"))
+
+plot_richness(ps_wgs_stool, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  scale_colour_manual(values = my_colors_id)
+
+
+## bar plots
+
+plot_bar(otu_table(ps_wgs_stool, TotalReads))+
+  scale_y_log10() +
+  ylab("Relative Abundance")
+
+plot_bar(ps_wgs_stool_rel, fill="Phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Stool Samples on Phylum Level (by id)")
+
+TopNOTUs_wgs_rel_st <- names(sort(taxa_sums(ps_wgs_stool_rel), TRUE)[1:25])
+ent15_wgs_rel_st <- prune_taxa(TopNOTUs_wgs_rel_st, ps_wgs_stool_rel)
+
+TopNOTUs_wgs_rel_st_10 <- names(sort(taxa_sums(ps_wgs_stool_rel), TRUE)[1:12])
+ent15_wgs_rel_st_10 <- prune_taxa(TopNOTUs_wgs_rel_st_10, ps_wgs_stool_rel)
+tax_table(ent15_wgs_rel_st_10)
+
+# phylum
+plot_bar(ent15_wgs_rel_st, fill="Phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Stool Samples on Phylum Level (by id)")
+
+plot_bar(ent15_wgs_rel_st, fill="Phylum") +
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Stool Samples on Phylum Level (by visit)")
+
+# genus
+plot_bar(ent15_wgs_rel_st_10, fill="Genus") +
+  facet_wrap(~id, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Stool Samples")
+ # ggtitle("Stool Samples on Genus Level (by id)")
+plot_bar(ent15_wgs_rel_st_10, fill="Genus") +
+  facet_wrap(~visit, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Stool Samples")
+  #ggtitle("Stool Samples on Genus Level (by visit)")
+
+
+
+## ordination - Beta-Diversity
+# PCoA plot using the unweighted UniFrac as distance
+ordination_wgs_st <- ordinate(ps_wgs_stool, method="PCoA")
+
+plot_ordination(ps_wgs_stool, ordination_wgs_st, color="visit") + 
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Visits") +
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_visit) +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ordination(ps_wgs_stool, ordination_wgs_st, color = "id") + 
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_id) +
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Patient IDs") +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ord_wgs_st <- ordinate(ps_wgs_stool_rel, "NMDS", "bray")
+plot_ordination(ps_wgs_stool_rel, plot_ord_wgs_st, type="taxa", color = "Phylum", title="Taxa")
+plot_ordination(ps_wgs_stool_rel, plot_ord_wgs_st, type = "samples", color = "id", title="Samples by id") +
+    scale_colour_manual(values = my_colors_id) +
+  stat_ellipse()
+
+```
+
+#### Stool Statistics
+
+```{r stool statistics}
+
+# observed otus differ greatly between visits? or patients?
+rich_wgs_stool <- estimate_richness(ps_wgs_stool, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_wgs_stool$Observed, sample_data(ps_wgs_stool)$id,  p.adjust.method = "BH") # no
+pairwise.wilcox.test(rich_wgs_stool$Observed, sample_data(ps_wgs_stool)$visit,  p.adjust.method = "BH") # no
+
+pairwise.wilcox.test(rich_wgs_stool$Shannon, sample_data(ps_wgs_stool)$id,  p.adjust.method = "BH") # no
+pairwise.wilcox.test(rich_wgs_stool$Shannon, sample_data(ps_wgs_stool)$visit,  p.adjust.method = "BH") # no
+
+pairwise.wilcox.test(rich_wgs_stool$Simpson, sample_data(ps_wgs_stool)$id,  p.adjust.method = "BH") # no
+pairwise.wilcox.test(rich_wgs_stool$Simpson, sample_data(ps_wgs_stool)$visit,  p.adjust.method = "BH") # no
+
+
+# Permanovas
+
+metadata_wgs_stool <- as(sample_data(ps_wgs_stool_rel),"data.frame")
+features_wgs_stool <- as.data.frame(t(otu_table(ps_wgs_stool_rel)))
+
+vegan::adonis2(features_wgs_stool ~ visit + bmi_perz + id + pp_fev1,data=metadata_wgs_stool, permutations = 999, na.action=na.exclude, method = "bray") %>% tidy()
+
+```
+
+# MetadeconfoundR
+
+```{r metadeconfounder}
+
+library(metadeconfoundR)
+
+# general on genus level
+
+ps_wgs_metad_glom <- tax_glom(ps_wgs_work, "Genus")
+tax_table(ps_wgs_metad_glom)
+
+metadata_wgs_metad <- as(sample_data(ps_wgs_metad_glom),"data.frame")
+
+#metadata_orkambi_metad %>% filter(patient_id == "SA11")
+
+# remove the unnecessary variables
+metadata_wgs_metad <- metadata_wgs_metad %>%
+   select(-c(patient_id, probe_id, mean_leucocyte_count_10_4_ml ,total_leucocytes_10_6, squamous_cell_count_percent, salbutamol, cortison_nasenspray, cortison_inhal, dexamethason_infectodexakrupp_b_b, aspecton_nasenspray, vitamines, pancreatic_enzymes, naproxen, luffanest_homeopath, ab365vorher, ab90vorher, ab15vorher, ab365burden, ab90burden, ab15burden, x_sample_id, label ))
+
+# make all factors numeric
+metadata_wgs_metad <- metadata_wgs_metad %>%
+   mutate(across(id:ne, as.numeric)) %>%
+   mutate(mrsa_staph_aureus_sputum = as.numeric(mrsa_staph_aureus_sputum))
+
+# calculate (-1) for all columns which where factors before
+metadata_wgs_metad <- metadata_wgs_metad %>%
+   mutate(gender = (gender-1)) %>%
+   mutate(base = (base - 1)) %>%
+   mutate(mrsa_staph_aureus_sputum = (mrsa_staph_aureus_sputum - 1))
+
+# binary variable at the front
+metadata_wgs_metad <- metadata_wgs_metad %>%
+   relocate(base, .before = id)
+
+# remove sequencing metadata
+metadata_wgs_metad <- metadata_wgs_metad %>%
+  select(-c(amp_score:ul_eluat, tota_ng_dna:dna_quant_ng_ul))
+
+# igg_response
+# 0 = bad
+# 1 = good
+metadata_wgs_metad <- metadata_wgs_metad %>%
+   mutate(igg_response = case_when(id == 2 | id == 3 | id == 4 ~ 0,
+                                 TRUE ~ 1)) %>%
+   relocate(igg_response, .before = base)
+
+```
+
+
+### Sputum
+
+```{r metadeconfoundr wgs sputum}
+
+ps_wgs_metad_glom_sp <- subset_samples(ps_wgs_metad_glom, material == "sputum")
+
+metadata_wgs_metad_sp <- metadata_wgs_metad %>%
+  filter(material == "sputum")
+
+# other input tables
+features <- as.data.frame(otu_table(ps_wgs_metad_glom_sp))
+taxtable <- as.data.frame(tax_table(ps_wgs_metad_glom_sp))
+
+taxtable <- taxtable%>%
+  select(Genus)
+
+features_named <- features
+features_named <- merge(features_named, taxtable, by = 0) 
+
+# remove double Genera
+features_named <- features_named[-c(129, 130, 157), ] # Clostridium (129), Collinsella (130), Mogibacterium (157)
+
+row.names(features_named) <- features_named$Genus
+features_named$Row.names <- NULL
+features_named$Genus <- NULL
+features_named <- as.data.frame(t(features_named))
+features_named <- features_named %>%
+  mutate_if(is.character, as.numeric)
+
+
+# metadeconfound
+sputum_wgs_metad <- MetaDeconfound(featureMat = features_named,metaMat = metadata_wgs_metad_sp, randomVar = list("+ (1|id)", c("id")), nnodes=6) # not enough visit 1
+
+# heatmap
+raw_p <- sputum_wgs_metad[1]
+corr_p <- sputum_wgs_metad[2]
+effect_size <- sputum_wgs_metad[3]
+status <- sputum_wgs_metad[4]
+
+hm <- BuildHeatmap(sputum_wgs_metad, showConfounded = F, q_cutoff = 0.1, d_cutoff = 0.01) 
+hm +
+  theme(axis.text.x=element_text(size=16, angle = 40, vjust = 1), axis.text.y=element_text(size=16, face="italic"), legend.position = "bottom")+
+  xlab("")+
+  ylab("")
+
+ggsave("heatmapMetadeconfoundR_wgs_sp_f_igg.png", width = 23, height = 17)
+
+
+```
+
+
+### Throat
+
+```{r metadeconfoundr wgs throat}
+
+
+ps_wgs_metad_glom_th <- subset_samples(ps_wgs_metad_glom, material == "throat")
+
+metadata_wgs_metad_th <- metadata_wgs_metad %>%
+  filter(material == "throat")
+
+# other input tables
+features <- as.data.frame(otu_table(ps_wgs_metad_glom_th))
+taxtable <- as.data.frame(tax_table(ps_wgs_metad_glom_th))
+
+taxtable <- taxtable%>%
+  select(Genus)
+
+features_named <- features#_t
+features_named <- merge(features_named, taxtable, by = 0) 
+
+# remove double Genera
+features_named <- features_named[-c(129, 130, 157), ] # Clostridium (129), Collinsella (130), Mogibacterium (157)
+
+row.names(features_named) <- features_named$Genus
+features_named$Row.names <- NULL
+features_named$Genus <- NULL
+features_named <- as.data.frame(t(features_named))
+#features_named <- features_named[-c(54), ]
+features_named <- features_named %>%
+  mutate_if(is.character, as.numeric)
+
+
+# metadeconfound
+throat_wgs_metad <- MetaDeconfound(featureMat = features_named,metaMat = metadata_wgs_metad_th, randomVar = list("+ (1|id)", c("id")), nnodes=6)
+
+# heatmap
+raw_p <- throat_wgs_metad[1]
+corr_p <- throat_wgs_metad[2]
+effect_size <- throat_wgs_metad[3]
+status <- throat_wgs_metad[4]
+hm <- BuildHeatmap(throat_wgs_metad, showConfounded = F, q_cutoff = 0.1, d_cutoff = 0.01) 
+hm +
+  theme(axis.text.x=element_text(size=16, angle = 40, vjust = 1), axis.text.y=element_text(size=16, face="italic"), legend.position = "bottom")+
+  xlab("")+
+  ylab("")
+
+ggsave("heatmapMetadeconfoundR_wgs_th_f_igg.png", width = 23, height = 17)
+
+```
+
+
+### Stool
+
+```{r metadeconfoundr wgs stool}
+
+ps_wgs_metad_glom_st <- subset_samples(ps_wgs_metad_glom, material == "stool")
+
+metadata_wgs_metad_st <- metadata_wgs_metad %>%
+  filter(material == "stool")
+
+# other input tables
+features <- as.data.frame(otu_table(ps_wgs_metad_glom_st))
+taxtable <- as.data.frame(tax_table(ps_wgs_metad_glom_st))
+
+taxtable <- taxtable%>%
+  select(Genus)
+
+features_named <- features
+features_named <- merge(features_named, taxtable, by = 0)
+
+# remove double Genera
+features_named <- features_named[-c(129, 130, 157), ] # Clostridium (129), Collinsella (130), Mogibacterium (157)
+
+row.names(features_named) <- features_named$Genus
+features_named$Row.names <- NULL
+features_named$Genus <- NULL
+features_named <- as.data.frame(t(features_named))
+features_named <- features_named %>%
+  mutate_if(is.character, as.numeric)
+
+# metadeconfound
+stool_wgs_metad <- MetaDeconfound(featureMat = features_named,metaMat = metadata_wgs_metad_st, randomVar = list("+ (1|id)", c("id")), nnodes=6)
+
+# heatmap
+raw_p <- stool_wgs_metad[1]
+corr_p <- stool_wgs_metad[2]
+effect_size <- stool_wgs_metad[3]
+status <- stool_wgs_metad[4]
+hm <- BuildHeatmap(stool_wgs_metad, showConfounded = F, q_cutoff = 0.1, d_cutoff = 0.01)
+hm +
+  theme(axis.text.x=element_text(size=16, angle = 40, vjust = 1), axis.text.y=element_text(size=16, face="italic"), legend.position = "bottom")+
+  xlab("")+
+  ylab("")
+
+ggsave("heatmapMetadeconfoundR_wgs_st_f_igg.png", width = 23, height = 17)
+
+```
