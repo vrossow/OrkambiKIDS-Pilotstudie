@@ -1,0 +1,563 @@
+---
+title: "OrkambiKIDS Statistcal Analysis"
+author: "Virginia Rossow"
+date: "20 6 2022"
+output: html_document
+---
+
+```{r setup2, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r path and packages2, include=FALSE}
+
+library(pacman)
+pacman::p_load(tidyverse, magrittr, janitor, microbiome, knitr, naniar, phyloseq, LongDat, kableExtra,
+               textshape, Biostrings, markdown, vegan, rstatix, gdata, tableone, corrplot, PerformanceAnalytics)
+
+ps_orkambi_work <- readRDS("ps_orkambi_trimmed.rds")
+
+```
+
+
+```{r run scripts, include=FALSE}
+
+# # run script to visualize the data
+# rmarkdown::render("orkambi_kids_visualizations.Rmd", "html_document")
+
+```
+
+      
+
+```{r prepare cinical_table, include=FALSE}
+
+clinical_table_1_9 <- as(sample_data(ps_orkambi_work),"data.frame")
+
+#clinical_table_1_9 <- clinical_table_1_9[!(row.names(clinical_table_1_9) %in% c("19SAV1St", "19MLV5St")), ]
+
+clinical_table_1_9 <- clinical_table_1_9[!duplicated(clinical_table_1_9[ , c("probe_id")]), ]
+
+```
+
+```{r cohort characteristics}
+
+cohort_df <- clinical_table_1_9 %>%
+   select(c(visit, probe_id, age, pp_fev1, pp_fvc, bmi_perz, lci)) %>%
+   filter(visit == 1 | visit == 9 | visit ==5)
+
+cohort_df <- cohort_df[!(row.names(cohort_df) %in% c("19SAV1St", "19MLV5St")), ]
+
+cohort_df <- cohort_df[!duplicated(cohort_df[ , c("probe_id")]), ]
+
+#data.frame(sapply(cohort_df %>% filter(visit == 1) %>% select(-c(probe_id, visit)), quantile))
+
+IQR((cohort_df %>% filter(visit == 5))$bmi_perz, na.rm = TRUE)
+
+
+```
+
+
+
+## Basic tests on the Metadata
+
+```{r basic exploration, warning=FALSE}
+
+# Events per variable
+(nrow(clinical_table_1_9)/7) %>% floor # -> max. 8 variables for per model
+(nrow(clinical_table_1_9)/15) %>% floor # -> max. 4 variables for per model (conservative)
+
+summary(clinical_table_1_9$pp_fev1) # normal distribution possible, probably
+
+clinical_num <- clinical_table_1_9 %>% 
+   dplyr::select_if(is.numeric) %>%
+   select(-c(kreon_average_i_eper_meal, pankreasenzyme, x1_calp_messung,
+             bsg_1h_mm, v1bsg_2h_mm, total_leucocytes_10_6, gew_zscore, groe_zscore, bmi_zscore, tn_falpha, il1beta, il6, il8,
+             ab90vorher, ab15vorher, ab90burden, ab90treatment, ab90courses, ab15burden, ab15treatment, ab15courses,
+             mean_leucocyte_count_10_4_ml, x2_calp_messung, weight_kg, length_cm, bmi, sp_o2_percent, fev1, 
+             pred_fev1, fvc, pred_fvc, lci, pred_lci, ig_a, ig_m, ab365vorher, frc, cathepsin))
+# cathepsin - outlier because of one patient
+# everything with >60% NA
+
+vis_miss(clinical_num)
+
+# chart.Correlation(clinical_num %>% select(-c(gew_perz, groe_perz, ab365burden, pred_frc, crp, ab356courses)),
+#                   method = "pearson",
+#                   histogram = TRUE,
+#                   pch = 16)
+
+
+```
+
+## Linear Models
+
+ID als random effect
+
+```{r simple Regressions and mixed models}
+
+hist(clinical_table_1_9$pp_fev1, breaks = 12)
+clinical_table_1_9 %>% filter(pp_fev1 <= 70) # make NA
+
+clinical_table_1_9 <- clinical_table_1_9 %>%
+   replace_with_na_at(.vars = c("pp_fev1"), condition = ~.x <= 70)
+
+
+lmerTest::lmer(pp_fev1 ~ visit + (1|id), clinical_table_1_9) %>% summary()
+
+lmerTest::lmer(lci ~ visit + (1|id), clinical_table_1_9) %>% summary()
+lmerTest::lmer(lci ~ visit + (1|id), clinical_table_1_9 %>% filter(visit != 6, visit != 7, visit != 8, visit != 9)) %>% summary()
+
+pairwise.wilcox.test(clinical_table_1_9$lci, clinical_table_1_9$visit,  p.adjust.method = "BH")
+
+ggplot(clinical_table_1_9, aes(x = as.numeric(visit), y = lci)) +
+   geom_jitter() +
+   geom_smooth(method = lm)
+
+#median((clinical_table_1_9 %>% filter(visit == 5))$sweatchloride_mmol_l)
+
+lmerTest::lmer(sweatchloride_mmol_l ~ visit + (1|id), clinical_table_1_9 %>% filter(visit == 1 | visit == 2 | visit == 5)) %>% summary() # nope
+
+lmerTest::lmer(pp_fev1 ~ bmi_perz + (1|id), clinical_table_1_9) %>% summary()
+
+ggplot(clinical_table_1_9, aes(x = bmi_perz, y = pp_fev1)) +
+   geom_jitter() +
+   geom_smooth(method = lm)
+
+hist(clinical_table_1_9$ig_g, breaks = 12)
+
+lmerTest::lmer(pp_fev1 ~ ig_g + (1|id), clinical_table_1_9) %>% summary() # yes
+
+ggplot(clinical_table_1_9, aes(x = ig_g, y = pp_fev1)) +
+   geom_jitter() +
+   geom_smooth(method = lm)
+
+hist(clinical_table_1_9$leukos, breaks = 12)
+
+lmerTest::lmer(leukos ~ visit + (1|id), clinical_table_1_9) %>% summary() # yes, at some points
+
+ggplot(clinical_table_1_9, aes(x = as.numeric(visit), y = leukos)) +
+   geom_point() +
+   geom_smooth(method = "glm")
+
+hist(clinical_table_1_9$ab90vorher, breaks = 12)
+
+lmerTest::lmer(ab90vorher ~ visit + (1|id), clinical_table_1_9) %>% summary() # no
+
+ggplot(clinical_table_1_9, aes(x = as.numeric(visit), y = ab90vorher)) +
+   geom_jitter() +
+   geom_smooth(method = "glm")
+
+hist(clinical_table_1_9$bmi_perz, breaks = 12)
+
+lmerTest::lmer(bmi_perz ~ visit + (1|id), clinical_table_1_9) %>% summary() # visit 7
+
+ggplot(clinical_table_1_9, aes(x = as.numeric(visit), y = bmi_perz)) +
+   geom_jitter() +
+   geom_smooth(method = "glm")
+
+
+```
+
+
+```{r multiple Regressions}
+
+# Events per variable
+(nrow(clinical_table_1_9)/15) %>% floor # -> max. 8 variables for per model (conservative)
+(nrow(clinical_table_1_9)/7) %>% floor # -> max. 4 variables for per model (not so conservative)
+
+# Models
+lmerTest::lmer(pp_fev1 ~ bmi_perz + ig_g + leukos + (1|id), clinical_table_1_9) %>% summary() # only ig_g
+
+lmerTest::lmer(pp_fev1 ~ bmi_perz*visit + (1|id), clinical_table_1_9) %>% summary() # nope
+
+
+```
+
+### Investigate the stool issue
+
+```{r stool tests, include=FALSE}
+
+# # shannon, observed and simpson individually over the visists
+# 
+# # richness for every single sample, shannon
+# rich_shannon <- estimate_richness(ps_orkambi_stool, split = TRUE, measures = c("Shannon"))
+# #view(rich_shannon)
+# 
+# rich_shannon_tbl <- dplyr::as_tibble(rich_shannon, rownames = "samp_id")
+# 
+# # make new column with visit
+# rich_shannon_tbl <- rich_shannon_tbl %>%
+#    mutate(visit = str_sub(samp_id, 6, 6)) %>%
+#    mutate(visit = as.numeric(visit)) %>%
+#    mutate(visit = as_factor(visit)) %>%
+#   clean_names()
+# 
+# lm(shannon ~ visit, data = rich_shannon_tbl) %>% summary()
+# 
+# # richness for every single sample, simpson
+# rich_simpson <- estimate_richness(ps_orkambi_stool, split = TRUE, measures = c("Simpson"))
+# 
+# rich_simpson_tbl <- dplyr::as_tibble(rich_simpson, rownames = "samp_id")
+# 
+# # make new column with visit
+# rich_simpson_tbl <- rich_simpson_tbl %>%
+#    mutate(visit = str_sub(samp_id, 6, 6)) %>%
+#    mutate(visit = as.numeric(visit)) %>%
+#    mutate(visit = as_factor(visit)) %>%
+#   clean_names()
+# 
+# lm(simpson ~ visit, data = rich_simpson_tbl) %>% summary()
+
+
+```
+
+## Permanovas
+
+```{r permanovas}
+
+ps_orkambi_1_9_rel <- transform_sample_counts(ps_orkambi_work, function(x) x/sum(x))
+
+ps_orkambi_1_9_rel_sp <- subset_samples(ps_orkambi_1_9_rel, material== "Sputum")
+ps_orkambi_1_9_rel_th <- subset_samples(ps_orkambi_1_9_rel, material== "Throat")
+ps_orkambi_1_9_rel_st <- subset_samples(ps_orkambi_1_9_rel, material== "Stool")
+
+# Sputum
+
+metadata_sputum <- as(sample_data(ps_orkambi_1_9_rel_sp),"data.frame")
+features_sputum <- as.data.frame(otu_table(ps_orkambi_1_9_rel_sp))
+
+vegan::adonis2(features_sputum ~ visit + bmi_perz + id + pp_fev1,data=metadata_sputum, permutations = 999, na.action=na.exclude, method = "bray") %>% tidy()
+
+# Throat
+
+metadata_throat <- as(sample_data(ps_orkambi_1_9_rel_th),"data.frame")
+features_throat <- as.data.frame(otu_table(ps_orkambi_1_9_rel_th))
+
+vegan::adonis2(features_throat ~ visit +bmi_perz + id + pp_fev1,data=metadata_throat, permutations = 999, na.action=na.exclude, method = "bray") %>% tidy()
+
+# Stool
+
+metadata_stool <- as(sample_data(ps_orkambi_1_9_rel_st),"data.frame")
+features_stool <- as.data.frame(otu_table(ps_orkambi_1_9_rel_st))
+
+vegan::adonis2(features_stool ~ visit +bmi_perz + id + pp_fev1,data=metadata_stool, permutations = 999, na.action=na.exclude, method = "bray") %>% tidy()
+
+
+```
+
+
+## MetaDeconfoundR
+
+
+```{r metadconfoundr, include=FALSE, eval=FALSE}
+
+# install.packages("remotes")
+# remotes::install_github("TillBirkner/metadeconfoundR")
+library(metadeconfoundR)
+
+ps_orkambi_work <- readRDS("/fast/AG_Forslund/Rebecca/CF_Scripts/ps_orkambi_trimmed.rds")
+
+# general on genus level
+
+ps_orkambi_metad_glom <- tax_glom(ps_orkambi_work, "genus")
+
+metadata_orkambi_metad <- as(sample_data(ps_orkambi_metad_glom),"data.frame")
+
+#metadata_orkambi_metad %>% filter(patient_id == "SA11")
+
+# remove the unnecessary variables
+metadata_orkambi_metad <- metadata_orkambi_metad %>%
+   select(-c(visit_date, be_date, throat_swab_date, stool_date, urine_date, weight_kg, length_cm, bmi, start_orkambi, sp_o2_percent, fev1, pred_fev1, fvc, pred_fvc, pred_lci, pp_lci, frc, pred_frc, total_leucocytes_10_6, squamous_cell_count_percent, filtratweight_g, filtratvolume_ml, kreon_average_i_eper_meal, gew_zscore, groe_zscore, bmi_zscore, sample_name, target_name, amp_status, task, intercept, r_squared, slope, efficiency, auto_threshold, auto_baseline, baseline_start, omit, date_q_pcr, extraction_date, project, kit, amount_stool_mg, material_label))
+
+# make all factors numeric 
+# -> dadurch gehen alle eins hoch, insbesondere die Mikrobio und Medikamente. Ist das schlimm?
+metadata_orkambi_metad <- metadata_orkambi_metad %>%
+   mutate(across(id:patient_id, as.numeric)) %>%
+   mutate(across(visit:age, as.numeric))
+
+metadata_orkambi_metad <- metadata_orkambi_metad %>%
+   mutate(gender = (gender-1)) %>%
+   mutate(base = (base - 1))
+
+# select useful variables (by omitting useless ones)
+metadata_orkambi_metad <- metadata_orkambi_metad %>%
+   select(-c(patient_id, probe_id, mean_leucocyte_count_10_4_ml, salbutamol, cortison_nasenspray, cortison_inhal, dexamethason_infectodexakrupp_b_b, aspecton_nasenspray, vitamines, pancreatic_enzymes, naproxen, luffanest_homeopath, ab365vorher, ab90vorher, ab15vorher, ab365burden, ab90burden, ab15burden, cq_mean, cq_standard_deviation, quantity_mean, quantity_standard_deviation, unnamed_6, position, extract_quant_ng_ul, grouping)) 
+# grouping zeigt die a proben nicht als extra an -> raus
+
+# binary variable at the front i guess
+metadata_orkambi_metad <- metadata_orkambi_metad %>%
+   relocate(base, .before = id)
+
+# igg_response
+# 0 = bad
+# 1 = good
+metadata_orkambi_metad <- metadata_orkambi_metad %>%
+   mutate(igg_response = case_when(id == 2 | id == 3 | id == 4 ~ 0,
+                                 TRUE ~ 1)) %>%
+   relocate(igg_response, .before = base)
+
+# remove sequencing metadata
+metadata_orkambi_metad <- metadata_orkambi_metad %>%
+   select(-c(well:dna_quant_ng_ul, ul_eluat:interim_sample))
+
+
+# sputum on genus level
+
+ps_orkambi_metad_glom_sp <- subset_samples(ps_orkambi_metad_glom, material == "Sputum")
+
+# metadata
+metadata_orkambi_metad_sp <- metadata_orkambi_metad %>%
+   filter(material == "Sputum")
+
+metadata_orkambi_metad_sp$igg_response # at least 5 per group
+
+# other input tables
+features_sp <- as.data.frame(otu_table(ps_orkambi_metad_glom_sp))
+taxtable_sp <- as.data.frame(tax_table(ps_orkambi_metad_glom_sp))
+
+
+taxtable_sp <- taxtable_sp %>%
+  select(genus)
+
+features_sp_t <- as.data.frame(t(features_sp))
+
+
+features_sp_named <- features_sp_t
+features_sp_named <- merge(features_sp_named, taxtable_sp, by = 0)
+row.names(features_sp_named) <- features_sp_named$genus
+features_sp_named$Row.names <- NULL
+features_sp_named$genus <- NULL
+features_sp_named <- as.data.frame(t(features_sp_named))
+
+# metadeconfound sputum
+sputum_metad <- MetaDeconfound(featureMat = features_sp_named,metaMat = metadata_orkambi_metad_sp, randomVar = list("+ (1|id)", c("id")), nnodes=6)
+
+# heatmap
+raw_p <- sputum_metad[1]
+corr_p <- sputum_metad[2]
+effect_size <- sputum_metad[3]
+status <- sputum_metad[4]
+
+hm <- BuildHeatmap(sputum_metad, showConfounded = F, q_cutoff = 0.05, d_cutoff = 0.01) 
+hm +
+  theme(axis.text.x=element_text(size=16, angle = 40, vjust = 1), axis.text.y=element_text(size=16, face="italic"), legend.position = "bottom")+
+  xlab("")+
+  ylab("")
+
+ggsave("/fast/AG_Forslund/Rebecca/CF_Scripts/heatmapMetadeconfoundR_sp_f_igg.png", width = 23, height = 17)
+
+
+# throat on genus level
+
+ps_orkambi_metad_glom_th <- subset_samples(ps_orkambi_metad_glom, material == "Throat")
+
+# metadata
+metadata_orkambi_metad_th <- metadata_orkambi_metad %>%
+   filter(material == "Throat")
+
+metadata_orkambi_metad_th$igg_response
+
+# other input tables
+features_th <- as.data.frame(otu_table(ps_orkambi_metad_glom_th))
+taxtable_th <- as.data.frame(tax_table(ps_orkambi_metad_glom_th))
+
+taxtable_th <- taxtable_th %>%
+  select(genus)
+
+features_th_t <- as.data.frame(t(features_th))
+
+features_th_named <- features_th_t
+features_th_named <- merge(features_th_named, taxtable_th, by = 0)
+row.names(features_th_named) <- features_th_named$genus
+features_th_named$Row.names <- NULL
+features_th_named$genus <- NULL
+features_th_named <- as.data.frame(t(features_th_named))
+
+# metadeconfound throat
+throat_metad <- MetaDeconfound(featureMat = features_th_named,metaMat = metadata_orkambi_metad_th, randomVar = list("+ (1|id)", c("id")), nnodes=6)
+
+# heatmap
+raw_p <- throat_metad[1]
+corr_p <- throat_metad[2]
+effect_size <- throat_metad[3]
+status <- throat_metad[4]
+
+hm <- BuildHeatmap(throat_metad, showConfounded = F, q_cutoff = 0.05, d_cutoff = 0.01) 
+hm +
+  theme(axis.text.x=element_text(size=16, angle = 40, vjust = 1), axis.text.y=element_text(size=16, face="italic"), legend.position = "bottom")+
+  xlab("")+
+  ylab("")
+
+ggsave("/fast/AG_Forslund/Rebecca/CF_Scripts/heatmapMetadeconfoundR_th_f_igg.png", width = 23, height = 17)
+
+
+# stool on genus level
+
+ps_orkambi_metad_glom_st <- subset_samples(ps_orkambi_metad_glom, material == "Stool")
+
+# metadata
+metadata_orkambi_metad_st <- metadata_orkambi_metad %>%
+   filter(material == "Stool")
+
+metadata_orkambi_metad_st$igg_response
+
+# other input tables
+features_st <- as.data.frame(otu_table(ps_orkambi_metad_glom_st))
+taxtable_st <- as.data.frame(tax_table(ps_orkambi_metad_glom_st))
+
+taxtable_st <- taxtable_st %>%
+  select(genus)
+
+features_st_t <- as.data.frame(t(features_st))
+
+features_st_named <- features_st_t
+features_st_named <- merge(features_st_named, taxtable_st, by = 0)
+row.names(features_st_named) <- features_st_named$genus
+features_st_named$Row.names <- NULL
+features_st_named$genus <- NULL
+features_st_named <- as.data.frame(t(features_st_named))
+
+# metadeconfound stool
+stool_metad <- MetaDeconfound(featureMat = features_st_named,metaMat = metadata_orkambi_metad_st, randomVar = list("+ (1|id)", c("id")), nnodes=6)
+
+# heatmap
+raw_p <- stool_metad[1]
+corr_p <- stool_metad[2]
+effect_size <- stool_metad[3]
+status <- stool_metad[4]
+
+hm <- BuildHeatmap(stool_metad, showConfounded = F, q_cutoff = 0.05, d_cutoff = 0.01) 
+hm +
+  theme(axis.text.x=element_text(size=16, angle = 40, vjust = 1), axis.text.y=element_text(size=16, face="italic"), legend.position = "bottom")+
+  xlab("")+
+  ylab("")
+
+ggsave("/fast/AG_Forslund/Rebecca/CF_Scripts/heatmapMetadeconfoundR_st_f_igg.png", width = 23, height = 17)
+
+```
+
+
+## Side effects
+
+```{r side effects}
+
+side_effects_tbl <- clinical_table_1_9 %>%
+   select(-contains("date")) %>%
+   select(-c(start_orkambi)) %>%
+   select(-c(84:113)) 
+
+# select side effects which occurred most often
+
+sides <- side_effects_tbl %>%
+   select(c(probe_id,59:73)) %>%
+   mutate(across(where(is.factor), as.numeric))
+sides <- sides[!duplicated(sides[ , c("probe_id")]), ] 
+sides <- sides[!(row.names(sides) %in% c("19MLV5St")), ]
+rownames(sides) <- sides$probe_id
+sides$probe_id <- NULL
+
+sides[is.na(sides)] <- 1
+
+sides_1 <- (sides -1)
+
+table(sides_1$ubelkeit)
+
+sides_occ <- c(19, 10, 29, 29, 13, 20, 3, 10, 6, 36, 20, 43, 14, 1, 13)
+sides_occ_df <- data.frame(side_effects = colnames(sides_1), side_effects_occ = sides_occ)
+
+ggplot(sides_occ_df, aes(x = side_effects, y = side_effects_occ)) +
+   theme_bw() +
+   geom_point() +
+   #geom_segment( aes(x=x, xend=x, y=0, yend=y)) +
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+   xlab("side effects") +
+   ylab("number of occurences")
+
+sides_1 %>% colSums()
+
+blahungen_tbl <- side_effects_tbl %>% filter(!is.na(blahungen))
+
+table(side_effects_tbl$blahungen, side_effects_tbl$visit)
+
+ggplot(blahungen_tbl, aes(x = visit, y = blahungen, color = blahungen)) +
+   geom_jitter() 
+
+
+# Blähungen
+barplot(table(side_effects_tbl$blahungen)) %>%
+   title(main = "Blähungen", ylab = "Häufigkeit", xlab = "Stärke")
+
+# Bauchschmerzen
+barplot(table(side_effects_tbl$bauchschmerzen)) %>%
+   title(main = "Bauchschmerzen", ylab = "Häufigkeit", xlab = "Stärke")
+
+# laufende Nase
+barplot(table(side_effects_tbl$laufende_nase)) %>%
+   title(main = "Laufende Nase", ylab = "Häufigkeit", xlab = "Stärke")
+
+# verstopfte Nase
+barplot(table(side_effects_tbl$verstopfte_nase)) %>%
+   title(main = "Verstopfte Nase", ylab = "Häufigkeit", xlab = "Stärke")
+
+# vermehrter Husten
+barplot(table(side_effects_tbl$vermehrter_husten)) %>%
+   title(main = "Vermehrter Husten", ylab = "Häufigkeit", xlab = "Stärke")
+
+# Kopfschmerzen
+barplot(table(side_effects_tbl$kopfschmerzen)) %>%
+   title(main = "Kopfschmerzen", ylab = "Häufigkeit", xlab = "Stärke")
+
+# hier dann die eintwicklung der häufigsten Nebenwirkungen über die Zeit...
+
+par(mfrow=c(2,2))
+barplot(table(side_effects_tbl %>% filter(visit == 1) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 1", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 2) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 2", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 5) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 5", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 9) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 9", ylab = "Häufigkeit", xlab = "Stärke")
+
+
+par(mfrow=c(3,3))
+barplot(table(side_effects_tbl %>% filter(visit == 1) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 1", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 2) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 2", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 3) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 3", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 4) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 4", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 5) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 5", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 6) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 6", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 7) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 7", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 8) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 8", ylab = "Häufigkeit", xlab = "Stärke")
+barplot(table(side_effects_tbl %>% filter(visit == 9) %>% select(blahungen))) %>%
+   title(main = "Blähungen - Visit 9", ylab = "Häufigkeit", xlab = "Stärke")
+
+
+
+
+```
+
+
+### For later
+
+Kofidenzintervalle:
+k2 <- t.test(chronicity ~ group, data = pr_data) %>% tidy()
+k2
+
+str_c(round(k2$estimate, 2), " [",
+      round(k2$conf.low, 2), "; ",
+      round(k2$conf.high, 2), "]")
+      
+VIF:
+variable inflation factor, zeigt correlation von Variablen (x untereinander) an
+"hoher" VIF kann problematisch sein, Daumenregel - VIF < 5 ist ok
+ols_vif_tol(model_log_full)
+

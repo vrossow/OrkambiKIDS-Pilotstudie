@@ -1,0 +1,807 @@
+---
+title: "OrkambiKids Visualizations"
+author: "Virginia Rossow"
+output: html_document
+---
+
+
+```{r setup1, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r path and packages1, include=FALSE}
+
+library(pacman)
+
+pacman::p_load(tidyverse, magrittr, janitor, microbiome, knitr, naniar, phyloseq, 
+               textshape, Biostrings, markdown, vegan, rstatix, gdata, tableone, ggpubr)
+
+```
+
+
+```{r run tidy script, include=FALSE}
+
+
+ps_orkambi_work <- readRDS("ps_orkambi_trimmed.rds")
+ps_orkambi_work_rel <- readRDS("ps_orkambi_trimmed_relative.rds")
+
+
+```
+
+    
+### Preprocessing    
+
+```{r prepare metadata, include=FALSE}
+
+Metadata_filt_2_1_9 <- data.frame(sample_data(ps_orkambi_work))
+Metadata_filt_2_1_9$total_reads <- sample_sums(ps_orkambi_work)
+
+# Metadata_filt_2_1_9 <- Metadata_filt_2_1_9 %>%
+#   filter(visit != 10 & visit != 11 & visit != 12 & visit != 13)
+# Metadata_filt_2_1_9$visit <- factor(Metadata_filt_2_1_9$visit)
+# levels((Metadata_filt_2_1_9$visit))
+
+#metadata_unique <- Metadata_filt_2_1_9[!(row.names(Metadata_filt_2_1_9) %in% c("19SAV1St", "19MLV5St")), ]
+metadata_unique <- Metadata_filt_2_1_9[!duplicated(Metadata_filt_2_1_9[ , c("probe_id")]), ]
+
+```
+
+```{r preprocessing by material}
+
+# un-rarefied
+ps_orkambi_sputum <- subset_samples(ps_orkambi_work, material == "Sputum")
+ps_orkambi_sputum_rel <- subset_samples(ps_orkambi_work_rel, material == "Sputum")
+
+rarecurve(otu_table(ps_orkambi_sputum), step=50, cex=0.5) # hnnnn, unsure
+
+# # rarefy sputum
+# ps_orkambi_sputum <- rarefy_even_depth(ps_orkambi_sputum_u, rngseed = 1, sample.size = min(sample_sums(ps_orkambi_sputum_u)), replace=F)
+# # -> 1272OTUs were removed because they are no longer present in any sample after random subsampling
+# 
+# # relative abundance ps, rarefyed, sputum
+# ps_orkambi_sputum_rel <- transform_sample_counts(ps_orkambi_sputum , function(x) x/sum(x) )
+
+# un-rarefied
+ps_orkambi_throat <- subset_samples(ps_orkambi_work, material == "Throat")
+ps_orkambi_throat_rel <- subset_samples(ps_orkambi_work_rel, material == "Throat")
+
+rarecurve(otu_table(ps_orkambi_throat), step=50, cex=0.5)
+
+# # rarefy throat
+# ps_orkambi_throat <- rarefy_even_depth(ps_orkambi_throat_u, rngseed = 1, sample.size = min(sample_sums(ps_orkambi_throat_u)), replace=F)
+# # -> 1016OTUs were removed because they are no longer present in any sample after random subsampling
+# 
+# # relative abundance ps, rarefyed, throat
+# ps_orkambi_throat_rel <- transform_sample_counts(ps_orkambi_throat , function(x) x/sum(x) )
+
+
+# un-rarefied
+ps_orkambi_stool <- subset_samples(ps_orkambi_work, material == "Stool")
+ps_orkambi_stool_rel <- subset_samples(ps_orkambi_work_rel, material == "Stool")
+
+rarecurve(otu_table(ps_orkambi_stool), step=50, cex=0.5)
+
+# # rarefy stool
+# ps_orkambi_stool <- rarefy_even_depth(ps_orkambi_stool_u, rngseed = 1, sample.size = min(sample_sums(ps_orkambi_stool_u)), replace=F)
+# # -> 806OTUs were removed because they are no longer present in any sample after random subsampling
+# 
+# # relative abundance ps, rarefyed, stool
+# ps_orkambi_stool_rel <- transform_sample_counts(ps_orkambi_stool , function(x) x/sum(x) )
+# 
+# ps_orkambi_rel_ab_1_9_2 <- merge_phyloseq(ps_orkambi_sputum_rel, ps_orkambi_throat_rel, ps_orkambi_stool_rel)
+
+
+```
+    
+      
+```{r palette, include=FALSE}
+
+# colours for each id
+my_colors_id <- c("aquamarine3", "skyblue1", "darkgoldenrod1", "firebrick2", "chartreuse3", "sienna1", "palevioletred2", "royalblue3")
+names(my_colors_id) <- levels((Metadata_filt_2_1_9$id))
+
+ggplot(Metadata_filt_2_1_9, aes(id)) +
+  geom_bar(aes(fill = id)) +
+  scale_fill_manual(name = "id", values = my_colors_id) +
+  theme_bw()
+
+# colours for each visit
+my_colors_visit <- c("darkorchid4", "mediumorchid2", "orchid1", "plum", "pink2", "hotpink2", "violetred1", "maroon3", "deeppink4")
+names(my_colors_visit) <- levels((Metadata_filt_2_1_9$visit))
+
+ggplot(Metadata_filt_2_1_9, aes(visit)) +
+  geom_bar(aes(fill = visit)) +
+  scale_fill_manual(name = "visit", values = my_colors_visit) +
+  theme_bw()
+
+# colour for each material
+my_colors_material <- c("lightgreen", "steelblue1", "brown1")
+names(my_colors_material) <- c("Throat", "Sputum", "Stool")
+
+ggplot(Metadata_filt_2_1_9, aes(material)) +
+  geom_bar(aes(fill = material)) +
+  scale_fill_manual(name = "visit", values = my_colors_material) +
+  theme_bw()
+
+```
+    
+    
+## General look at the data
+      
+
+### Visualizations
+
+```{r general visualizations}
+
+Metadata_filt_2_1_9$material <- factor(Metadata_filt_2_1_9$material, levels = c("Sputum", "Throat", "Stool"), ordered = TRUE)
+
+# reads per material
+# all materials
+ Metadata_filt_2_1_9 %>%
+  ggplot(., aes(x = material, y = total_reads, fill= material)) +
+  geom_boxplot() +
+  scale_fill_manual(name = "material", values = my_colors_material) +
+  theme_bw()
+ 
+ Metadata_filt_2_1_9 %>%
+   group_by(material) %>%
+   summarise(Median=as.numeric(median(total_reads)), Mean = mean(total_reads))
+
+plot_ordination(ps_orkambi_work, ordinate(ps_orkambi_work, "MDS"), color = "material") + 
+  geom_point(size = 3) +
+  theme_bw() +
+  #ggtitle("Taxa by material") +
+  scale_colour_manual(name = "material", values = my_colors_material) 
+
+
+# with relative abundance 
+TopNOTUs_rel <- names(sort(taxa_sums(ps_orkambi_work_rel), TRUE)[1:20])
+ent20_rel <- prune_taxa(TopNOTUs_rel, ps_orkambi_work_rel)
+plot_bar(ent20_rel, "id", fill = "genus", facet_grid = material ~ visit)+
+  theme_bw() +
+  ggtitle("Most abundant genera") +
+  ylab("Relative Abundance")
+
+plot_bar(ps_orkambi_work_rel, "id", fill = "phylum", facet_grid = material ~ visit)+
+  theme_bw() +
+  ggtitle("Most abundant phyla") +
+  ylab("Relative Abundance")
+
+TopNOTUs_rel_ab <- names(sort(taxa_sums(ps_orkambi_work_rel), TRUE)[1:15])
+ent10_rel_ab <- prune_taxa(TopNOTUs_rel_ab, ps_orkambi_work_rel)
+plot_bar(ent10_rel_ab, "material", facet_grid = ~genus) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size=6, angle=90)) +
+  ylab("Relative Abundance") 
+
+# qpcr data
+Metadata_filt_2_1_9 %>%
+ ggplot(aes(probe_id, quantity_mean))+
+ geom_point(aes(color = id)) +
+  theme_bw() +
+  scale_y_log10()+
+  facet_grid(rows=vars(material))+
+  theme(axis.text.x = element_text(size=6, angle=90))+
+  labs(y = "log10 16S copies") +
+  scale_colour_manual(name = "id", values = my_colors_id) 
+
+# ppFEV1
+metadata_unique %>%
+  filter(pp_fev1 > 5) %>%
+  ggplot(aes(x=visit, y=pp_fev1)) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  ylab("ppFEV1 (lung function)")+
+  theme(text = element_text(size=16)) +
+  #ggtitle("Lung Function")+
+  scale_color_manual(name = "id", values = my_colors_id) 
+
+# LCI
+metadata_unique %>%
+  #filter(id != 3) %>%
+  ggplot(aes(x=visit, y=lci)) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  ylab("LCI")+
+  theme(text = element_text(size=16)) +
+  #ggtitle("Lung Function (LCI)")+
+  scale_color_manual(name = "id", values = my_colors_id)
+
+# sweatchloride
+metadata_unique %>%
+  filter(visit == 1 | visit == 2 | visit == 5) %>%
+  ggplot(aes(x=visit, y=sweatchloride_mmol_l)) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  ylab("sweatchloride in mmol/l")+
+  theme(text = element_text(size=16)) +
+  #ggtitle("Lung Function (LCI)")+
+  scale_color_manual(name = "id", values = my_colors_id)
+
+# lung function: pp_fev1 between visits
+Metadata_filt_2_1_9 %>%
+  #filter(label != NA) %>%
+  #unique(.$probe_id) %>%
+  filter(pp_fev1 > 5) %>%
+  ggplot(aes(x=visit, y=pp_fev1)) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  ylab("ppFEV1 (lung function)")+
+  theme(text = element_text(size=16)) +
+  #ggtitle("Lung Function")+
+  scale_color_manual(name = "id", values = my_colors_id) 
+
+# NMDS nicht-metrische multidimensionale Skalierung (Range werden anstelle von Werten genutzt, es wird auf Monotonie geachtet)
+
+plot_ord_data <- ordinate(ps_orkambi_work_rel, "NMDS", "bray")
+plot_ordination(ps_orkambi_work_rel, plot_ord_data, type="taxa", color = "phylum", title="Taxa") 
+plot_ordination(ps_orkambi_work_rel, plot_ord_data, type="samples", color = "material", title="Samples") +
+  scale_colour_manual(name = "material", values = my_colors_material)
+plot_ordination(ps_orkambi_work_rel, plot_ord_data, type="split", color = "material", title="Samples and Taxa") +
+  scale_colour_manual(name = "material", values = my_colors_material)
+
+
+```
+
+### Visualizations by timepoint
+
+```{r 16s timepoints}
+
+ps_orkambi_vx_t <- subset_samples(ps_orkambi_work, material == "Throat")
+ps_orkambi_vx_t <- subset_samples(ps_orkambi_vx_t, visit_2 == "baseline" | visit_2 == "start" | visit_2 == "mid" | visit_2 == "end")
+ps_orkambi_vx_st <- subset_samples(ps_orkambi_work, material == "Stool")
+ps_orkambi_vx_st <- subset_samples(ps_orkambi_vx_st, visit_2 == "baseline" | visit_2 == "start" | visit_2 == "mid" | visit_2 == "end")
+ps_orkambi_vx_s <- subset_samples(ps_orkambi_work, material == "Sputum")
+ps_orkambi_vx_s <- subset_samples(ps_orkambi_vx_s, visit_2 == "baseline" | visit_2 == "start" | visit_2 == "mid" | visit_2 == "end")
+
+
+my_comparisons <- list(c("baseline", "start"), c("baseline", "mid"), c("baseline", "end"))
+
+sample_data(ps_orkambi_work)$material <- factor(sample_data(ps_orkambi_work)$material, levels = c("Sputum", "Throat", "Stool"), ordered = TRUE)
+
+
+# general
+  plot_richness(ps_orkambi_work, x = "material", color = "material", measures = c("Observed", "Shannon", "Simpson")) +
+  geom_boxplot(aes(color = material)) + 
+  theme_bw() +
+  geom_point(position = position_dodge(width = 0.75)) +
+  scale_colour_manual(name = "material", values = my_colors_material) +
+  #ggtitle("Alpha-Diversity (all materials)") +
+  theme(legend.position = "none") +
+  stat_compare_means(comparison=list(c("Stool", "Throat"), c("Stool", "Sputum"), c("Throat", "Sputum")), method="wilcox.test", p.adjust.method="BH", label = "p.signif")
+
+# throat
+plot_richness(ps_orkambi_vx_t, x = "visit_2", color = "visit_2", measures = c("Observed", "Shannon", "Simpson")) + 
+  geom_boxplot(aes(color = visit_2)) + 
+  geom_point(position = position_dodge(width = 0.75)) +
+  theme_bw() +
+  #ggtitle("Alpha-Diversity (throat)") +
+  #geom_line() +
+  theme(legend.position = "none") +
+  xlab("throat timepoints") +
+  stat_compare_means(comparison=my_comparisons, method="wilcox.test", p.adjust.method="BH", label = "p.signif")
+
+# stool
+plot_richness(ps_orkambi_vx_st, x = "visit_2", color = "visit_2", measures = c("Observed", "Shannon", "Simpson")) + 
+  geom_boxplot(aes(color = visit_2)) + 
+  geom_point(position = position_dodge(width = 0.75)) +
+  theme_bw() +
+  #ggtitle("Alpha-Diversity (stool)") +
+  geom_smooth() +
+  theme(legend.position = "none") +
+  xlab("stool timepoints") +
+  stat_compare_means(comparison=my_comparisons, method="wilcox.test", p.adjust.method="BH", label = "p.signif")
+
+# sputum
+plot_richness(ps_orkambi_vx_s, x = "visit_2", color = "visit_2", measures = c("Observed", "Shannon", "Simpson")) + 
+  geom_boxplot(aes(color = visit_2)) + 
+  geom_point(position = position_dodge(width = 0.75)) +
+  theme_bw() +
+  #ggtitle("Alpha-Diversity (sputum)") +
+  geom_smooth() +
+  theme(legend.position = "none") +
+  xlab("sputum timepoints") +
+  stat_compare_means(comparison=my_comparisons, method="wilcox.test", p.adjust.method="BH", label = "p.signif")
+
+```
+
+
+## Visualizations devided by material (rarefied)
+
+
+### Sputum
+
+```{r sputum, warning=FALSE, fig.dim = c(8, 8)}
+
+## general
+
+nsamples(ps_orkambi_sputum)
+ntaxa(ps_orkambi_sputum)
+min(otu_table(ps_orkambi_sputum, TotalReads))
+max(otu_table(ps_orkambi_sputum, TotalReads))
+
+get_taxa_unique(ps_orkambi_sputum, "phylum")
+
+# richness for every single sample
+# er_sp <- estimate_richness(ps_orkambi_sputum, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+# er_sp
+# summary(er_sp)
+# IQR(er_sp$Observed)
+# IQR(er_sp$Shannon)
+# IQR(er_sp$Simpson)
+# richness for pooled samples
+estimate_richness(ps_orkambi_sputum, split = FALSE, measures = c("Observed", "Shannon", "Simpson"))
+
+plot_bar(otu_table(ps_orkambi_sputum, TotalReads))+
+  scale_y_log10() +
+  ylab("Relative Abundance")
+  
+
+# Bar Plots
+
+TopNOTUs_rel_sp <- names(sort(taxa_sums(ps_orkambi_sputum_rel), TRUE)[1:25])
+ent15_rel_sp <- prune_taxa(TopNOTUs_rel_sp, ps_orkambi_sputum_rel)
+
+TopNOTUs_rel_sp_5 <- names(sort(taxa_sums(ps_orkambi_sputum_rel), TRUE)[1:20]) # 15
+ent15_rel_sp_5 <- prune_taxa(TopNOTUs_rel_sp_5, ps_orkambi_sputum_rel)
+
+plot_bar(ps_orkambi_sputum_rel, fill="phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Phylum Level (by id)") # nach id
+
+# poster plot
+pp <- plot_bar(ps_orkambi_sputum_rel, fill="phylum") + 
+  theme_bw() +
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme(axis.text.x = element_blank(), legend.position = "bottom") +
+  ggtitle("Sputum Samples on Phylum Level (by visit)") +
+  ylab("Relative Abundance") +
+  xlab("Samples")
+ggsave(plot = pp, width = 6.5, height = 5, dpi = 300, filename = "sputum_samples_plot.png")
+
+# id and visit
+plot_bar(ps_orkambi_sputum_rel, "id", fill = "phylum", facet_grid = material ~ visit) + 
+  theme_bw() +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Phylum Level (by id and visit)")
+
+# most abundant
+plot_bar(ent15_rel_sp, fill="genus") + 
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ggtitle("Sputum Samples on Genus Level (by visit)") +
+  ylab("Relative Abundance")
+
+# barplot like whole genome
+plot_bar(ent15_rel_sp_5, fill="genus") +
+  facet_wrap(~id, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Sputum Samples")
+plot_bar(ent15_rel_sp_5, fill="genus") +
+  facet_wrap(~visit, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Sputum Samples")
+
+# most abundant
+plot_bar(ent15_rel_sp, "id", fill = "genus", facet_grid = material ~ visit) + 
+  theme_bw() +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Genus Level (by id and visit)")
+
+
+## alpha diversity
+
+plot_richness(ps_orkambi_sputum, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  scale_colour_manual(values = my_colors_id)
+
+
+# observed otus differ greatly between visits? or patients?
+rich_sputum <- estimate_richness(ps_orkambi_sputum, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_sputum$Observed, sample_data(ps_orkambi_sputum)$id,  p.adjust.method = "BH") # guess that means no?
+pairwise.wilcox.test(rich_sputum$Observed, sample_data(ps_orkambi_sputum)$visit,  p.adjust.method = "BH") # also no?
+
+# v1 vs v5 vs v9
+ps_orkambi_sputum_1 <- subset_samples(ps_orkambi_sputum, visit == "1")
+ps_orkambi_sputum_5 <- subset_samples(ps_orkambi_sputum, visit == "5")
+ps_orkambi_sputum_9 <- subset_samples(ps_orkambi_sputum, visit == "9")
+ps_orkambi_sputum_159 <- merge_phyloseq(ps_orkambi_sputum_1, ps_orkambi_sputum_5, ps_orkambi_sputum_9)
+
+rich_sputum_159 <- estimate_richness(ps_orkambi_sputum_159, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_sputum_159$Observed, sample_data(ps_orkambi_sputum_159)$visit,  p.adjust.method = "BH")
+pairwise.wilcox.test(rich_sputum_159$Shannon, sample_data(ps_orkambi_sputum_159)$visit,  p.adjust.method = "BH")
+pairwise.wilcox.test(rich_sputum_159$Simpson, sample_data(ps_orkambi_sputum_159)$visit,  p.adjust.method = "BH")
+
+# er_sp_1 <- estimate_richness(ps_orkambi_sputum_1, measures=c("Observed", "Shannon", "Simpson"))
+# er_sp_5 <- estimate_richness(ps_orkambi_sputum_5, measures=c("Observed", "Shannon", "Simpson"))
+# er_sp_9 <- estimate_richness(ps_orkambi_sputum_9, measures=c("Observed", "Shannon", "Simpson"))
+# summary(er_sp_1)
+# summary(er_sp_5)
+# summary(er_sp_9)
+# IQR(er_sp_1$Observed)
+# IQR(er_sp_1$Shannon)
+# IQR(er_sp_1$Simpson)
+
+## beta diversity
+
+# PCoA plot using the unweighted UniFrac as distance
+ordination_sp <- ordinate(ps_orkambi_sputum, method="PCoA")
+
+plot_ordination(ps_orkambi_sputum, ordination_sp, color="visit") + 
+  theme(aspect.ratio=1) +
+ # ggtitle("PCoA - Visits") +
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_visit) +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ordination(ps_orkambi_sputum, ordination_sp, color = "id") + 
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_id) +
+  theme(aspect.ratio=1) +
+ # ggtitle("PCoA - Patient IDs") +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ord_data_sp <- ordinate(ps_orkambi_sputum_rel, "NMDS", "bray")
+plot_ordination(ps_orkambi_sputum_rel, plot_ord_data_sp, type="taxa", color = "phylum", title="Taxa")
+plot_ordination(ps_orkambi_sputum_rel, plot_ord_data_sp, type = "saples", color = "id", title="Samples by id") +
+    scale_colour_manual(values = my_colors_id) +
+  stat_ellipse()
+
+
+```
+
+
+### Throat
+
+```{r throat, warning=FALSE, fig.dim = c(8, 8)}
+
+## general
+
+nsamples(ps_orkambi_throat)
+ntaxa(ps_orkambi_throat)
+min(otu_table(ps_orkambi_throat, TotalReads))
+max(otu_table(ps_orkambi_throat, TotalReads))
+
+Metadata_filt_2_1_9 %>% filter(visit == 8)
+
+get_taxa_unique(ps_orkambi_throat, "phylum")
+
+# richness for every single sample
+# er_th <- estimate_richness(ps_orkambi_throat, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+# er_th
+# summary(er_th)
+# IQR(er_th$Observed)
+# IQR(er_th$Shannon)
+# IQR(er_th$Simpson)
+# richness for pooled samples
+estimate_richness(ps_orkambi_throat, split = FALSE, measures = c("Observed", "Shannon", "Simpson"))
+
+plot_bar(otu_table(ps_orkambi_throat, TotalReads))+
+  scale_y_log10() +
+  ylab("Relative Abundance")
+
+# Bar Plots
+
+TopNOTUs_rel_th <- names(sort(taxa_sums(ps_orkambi_throat_rel), TRUE)[1:25])
+ent15_rel_th <- prune_taxa(TopNOTUs_rel_th, ps_orkambi_throat_rel)
+
+TopNOTUs_rel_th_5 <- names(sort(taxa_sums(ps_orkambi_throat_rel), TRUE)[1:15])
+ent15_rel_th_5 <- prune_taxa(TopNOTUs_rel_th_5, ps_orkambi_throat_rel)
+tax_table(ent15_rel_th_5)
+
+plot_bar(ps_orkambi_throat_rel, fill="phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Throat Samples on Phylum Level")
+
+plot_bar(ent15_rel_th_5, fill="genus") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Throat Samples on Genus Level")
+
+plot_bar(ps_orkambi_throat_rel, fill="phylum") + 
+  theme_bw() +
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ggtitle("Throat Samples on Phylum Level (by visit)") +
+  ylab("Relative Abundance")
+
+# id and visit
+plot_bar(ps_orkambi_throat_rel, "id", fill = "phylum", facet_grid = material ~ visit) + 
+  theme_bw() +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Phylum Level (by id and visit)")
+
+plot_bar(ent15_rel_th, fill="genus") + 
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ggtitle("Throat Samples on Genus Level (by visit)") +
+  ylab("Relative Abundance")
+
+# like whole genome
+plot_bar(ent15_rel_th_5, fill="genus") +
+  facet_wrap(~id, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance")+
+  xlab("Throat Samples")
+plot_bar(ent15_rel_th_5, fill="genus") +
+  facet_wrap(~visit, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Throat Samples")
+
+plot_bar(ent15_rel_th, "id", fill = "genus", facet_grid = material ~ visit) + 
+  theme_bw() +
+  ylab("Relative Abundance") +
+  ggtitle("Throat Samples on Genus Level (by id)")
+
+
+## alpha diversity
+
+plot_richness(ps_orkambi_throat, x = "visit", color = "id", measures = c("Observed", "Shannon", "Simpson")) + 
+  theme_bw() +
+  scale_colour_manual(values = my_colors_id)
+
+plot_richness(ps_orkambi_throat, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  geom_boxplot() +
+  geom_jitter() +
+  theme_bw()
+
+plot_richness(ps_orkambi_throat, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  scale_colour_manual(values = my_colors_id)
+
+
+# observed otus differ greatly between visits? or patients?
+rich_throat <- estimate_richness(ps_orkambi_throat, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_throat$Observed, sample_data(ps_orkambi_throat)$id,  p.adjust.method = "BH") # guess that means no?
+pairwise.wilcox.test(rich_throat$Observed, sample_data(ps_orkambi_throat)$visit,  p.adjust.method = "BH") # also no?
+
+# v1 vs v5 vs v9
+ps_orkambi_throat_1 <- subset_samples(ps_orkambi_throat, visit == "1")
+ps_orkambi_throat_5 <- subset_samples(ps_orkambi_throat, visit == "5")
+ps_orkambi_throat_9 <- subset_samples(ps_orkambi_throat, visit == "9")
+ps_orkambi_throat_159 <- merge_phyloseq(ps_orkambi_throat_1, ps_orkambi_throat_5, ps_orkambi_throat_9)
+
+rich_throat_159 <- estimate_richness(ps_orkambi_throat_159, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_throat_159$Observed, sample_data(ps_orkambi_throat_159)$visit,  p.adjust.method = "BH")
+pairwise.wilcox.test(rich_throat_159$Shannon, sample_data(ps_orkambi_throat_159)$visit,  p.adjust.method = "BH")
+pairwise.wilcox.test(rich_throat_159$Simpson, sample_data(ps_orkambi_throat_159)$visit,  p.adjust.method = "BH")
+
+
+## beta diversity
+
+# PCoA plot using the unweighted UniFrac as distance
+ordination_th <- ordinate(ps_orkambi_throat, method="PCoA")
+
+plot_ordination(ps_orkambi_throat, ordination_th, color="visit") + 
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Visits") +
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_visit) +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ordination(ps_orkambi_throat, ordination_th, color = "id") + 
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_id) +
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Patient IDs") +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ord_data_th <- ordinate(ps_orkambi_throat_rel, "NMDS", "bray")
+plot_ordination(ps_orkambi_throat, plot_ord_data_th, type="taxa", color = "phylum", title="Taxa")
+plot_ordination(ps_orkambi_throat, plot_ord_data_th, type = "samples", color = "id", title="Samples by id") +
+  scale_colour_manual(values = my_colors_id) +
+  stat_ellipse()
+
+```
+
+
+### Stool
+
+```{r stool, warning=FALSE, fig.dim = c(8, 8)}
+
+## general
+
+nsamples(ps_orkambi_stool)
+ntaxa(ps_orkambi_stool)
+min(otu_table(ps_orkambi_stool, TotalReads))
+max(otu_table(ps_orkambi_stool, TotalReads))
+
+get_taxa_unique(ps_orkambi_stool, "phylum")
+
+# richness for every single sample
+# er_st <- estimate_richness(ps_orkambi_stool, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+# er_st 
+# summary(er_st)
+# IQR(er_st$Observed)
+# IQR(er_st$Shannon)
+# IQR(er_st$Simpson)
+
+# richness for pooled samples
+estimate_richness(ps_orkambi_stool, split = FALSE, measures = c("Observed", "Shannon", "Simpson"))
+
+plot_bar(otu_table(ps_orkambi_stool, TotalReads))+
+  scale_y_log10() +
+  ylab("Relative Abundance")
+
+# Bar Plots
+
+TopNOTUs_rel_st <- names(sort(taxa_sums(ps_orkambi_stool_rel), TRUE)[1:20])
+ent15_rel_st <- prune_taxa(TopNOTUs_rel_st, ps_orkambi_stool_rel)
+
+TopNOTUs_rel_st_5 <- names(sort(taxa_sums(ps_orkambi_stool_rel), TRUE)[1:12])
+ent15_rel_st_5 <- prune_taxa(TopNOTUs_rel_st_5, ps_orkambi_stool_rel)
+#tax_table(ent15_rel_st_5)
+
+plot_bar(ps_orkambi_stool_rel, fill="phylum") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  ggtitle("Stool Samples on Phylum Level")
+
+plot_bar(ent15_rel_st_5, fill="genus") +
+  facet_wrap(~id, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") #+
+  #ggtitle("Stool Samples on Phylum Level")
+
+plot_bar(ps_orkambi_stool_rel, fill="phylum") + 
+  theme_bw() +
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ggtitle("Stool Samples on Phylum Level (by visit)") +
+  ylab("Relative Abundance")
+
+# id and visit
+plot_bar(ps_orkambi_stool_rel, "id", fill = "phylum", facet_grid = material ~ visit) + 
+  theme_bw() +
+  ylab("Relative Abundance") +
+  ggtitle("Sputum Samples on Phylum Level (by id and visit)")
+
+plot_bar(ent15_rel_st, fill="genus") + 
+  facet_wrap(~visit, scales="free_x", nrow=1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ggtitle("Stool Samples on Genus Level (by visit)") +
+  ylab("Relative Abundance")
+
+# barplot like whole genome
+plot_bar(ent15_rel_st_5, fill="genus") +
+  facet_wrap(~id, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Stool Samples")
+plot_bar(ent15_rel_st_5, fill="genus") +
+  facet_wrap(~visit, scales="free_x", nrow=1, labeller = "label_both") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 60, vjust = 1, hjust = 1)) +
+  ylab("Relative Abundance") +
+  xlab("Stool Samples")
+
+plot_bar(ent15_rel_st, "id", fill = "genus", facet_grid = material ~ visit) + 
+  theme_bw() +
+  ylab("Relative Abundance") +
+  ggtitle("Stool Samples on Genus Level (by id)")
+
+
+## alpha diversity
+
+# it seems do get better over the visits -> investigate!
+plot_richness(ps_orkambi_stool, x = "visit", color = "id", measures = c("Observed", "Shannon", "Simpson")) + 
+  theme_bw() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  scale_colour_manual(values = my_colors_id)
+
+plot_richness(ps_orkambi_stool, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  geom_boxplot() +
+  geom_jitter() +
+  theme_bw() 
+
+plot_richness(ps_orkambi_stool, x = "visit", measures = c("Observed", "Shannon", "Simpson")) +
+  theme_bw() +
+  geom_boxplot() +
+  geom_line(aes(x = visit, group = id, color = id)) +
+  geom_point(aes(x = visit, color = id)) +
+  scale_colour_manual(values = my_colors_id)
+
+
+# observed otus differ greatly between visits? or patients?
+rich_stool <- estimate_richness(ps_orkambi_stool, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_stool$Observed, sample_data(ps_orkambi_stool)$id,  p.adjust.method = "BH") # guess that means no?
+pairwise.wilcox.test(rich_stool$Observed, sample_data(ps_orkambi_stool)$visit,  p.adjust.method = "BH") # also no?
+
+# v1 vs v5 vs v9
+ps_orkambi_stool_1 <- subset_samples(ps_orkambi_stool, visit == "1")
+ps_orkambi_stool_5 <- subset_samples(ps_orkambi_stool, visit == "5")
+ps_orkambi_stool_9 <- subset_samples(ps_orkambi_stool, visit == "9")
+ps_orkambi_stool_159 <- merge_phyloseq(ps_orkambi_stool_1, ps_orkambi_stool_5, ps_orkambi_stool_9)
+
+rich_stool_159 <- estimate_richness(ps_orkambi_stool_159, measures=c("Observed", "Shannon", "Simpson"))
+pairwise.wilcox.test(rich_stool_159$Observed, sample_data(ps_orkambi_stool_159)$visit,  p.adjust.method = "BH")
+pairwise.wilcox.test(rich_stool_159$Shannon, sample_data(ps_orkambi_stool_159)$visit,  p.adjust.method = "BH")
+pairwise.wilcox.test(rich_stool_159$Simpson, sample_data(ps_orkambi_stool_159)$visit,  p.adjust.method = "BH")
+
+# er_st_1 <- estimate_richness(ps_orkambi_stool_1, measures=c("Observed", "Shannon", "Simpson"))
+# er_st_5 <- estimate_richness(ps_orkambi_stool_5, measures=c("Observed", "Shannon", "Simpson"))
+# er_st_9 <- estimate_richness(ps_orkambi_stool_9, measures=c("Observed", "Shannon", "Simpson"))
+# summary(er_st_1)
+# summary(er_st_5)
+# summary(er_st_9)
+# IQR(er_st_1$Observed)
+# IQR(er_st_1$Shannon)
+# IQR(er_st_1$Simpson)
+# IQR(er_st_5$Observed)
+# IQR(er_st_5$Shannon)
+# IQR(er_st_5$Simpson)
+# IQR(er_st_9$Observed)
+# IQR(er_st_9$Shannon)
+# IQR(er_st_9$Simpson)
+
+## beta diversity
+
+# PCoA plot using the unweighted UniFrac as distance
+ordination_st <- ordinate(ps_orkambi_stool, method = "PCoA")
+
+plot_ordination(ps_orkambi_stool, ordination_st, color = "visit") + 
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Visits (stool)") +
+  geom_point(size = 1) +
+   scale_colour_manual(values = my_colors_visit) +
+  stat_ellipse() +
+  theme_bw()
+
+plot_ordination(ps_orkambi_stool, ordination_st, color = "id") + 
+  theme(aspect.ratio=1) +
+  #ggtitle("PCoA - Patient IDs (stool)") +
+  geom_point(size = 1) +
+  theme_bw() +
+   scale_colour_manual(values = my_colors_id) +
+  stat_ellipse()
+
+plot_ord_data_st <- ordinate(ps_orkambi_stool_rel, "NMDS", "bray")
+plot_ordination(ps_orkambi_stool_rel, plot_ord_data_st, type="taxa", color = "phylum", title="Taxa")
+plot_ordination(ps_orkambi_stool_rel, plot_ord_data_st, type = "sample", color = "id", title="Samples by id (stool)")+
+  theme_bw() +
+  scale_colour_manual(values = my_colors_id) +
+  stat_ellipse()
+
+
+```
+
