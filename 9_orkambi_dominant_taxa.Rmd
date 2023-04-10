@@ -1,0 +1,491 @@
+---
+title: "OrkambiKIDS Dominant Taxa"
+author: "Virginia Rossow, derived from Rebecca Knoll"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load packages and data}
+
+library(pacman)
+pacman::p_load(tidyverse, janitor, broom, phyloseq, vegan, magrittr, microbiome, pheatmap, formattable)
+
+source("orkambi_dom_taxa_functions.R")
+
+```
+
+
+## 16S Data
+
+All cluster by dominant Genus
+
+
+```{r prepare data 16s}
+
+ps_orkambi_work <- readRDS("ps_orkambi_trimmed.rds")
+
+# relative abundance in percent
+ps_orkambi_rel_100 <- transform_sample_counts(ps_orkambi_work, function(x) x/sum(x)*100) 
+
+# by material
+ps_orkambi_dom_sputum <- subset_samples(ps_orkambi_rel_100, material== "Sputum")
+ps_orkambi_dom_throat <- subset_samples(ps_orkambi_rel_100, material== "Throat")
+ps_orkambi_dom_stool <- subset_samples(ps_orkambi_rel_100, material== "Stool")
+
+ps_orkambi_dom_sputum_glom <- tax_glom(ps_orkambi_dom_sputum, taxrank = "genus")
+ps_orkambi_dom_throat_glom <- tax_glom(ps_orkambi_dom_throat, taxrank = "genus")
+ps_orkambi_dom_stool_glom <- tax_glom(ps_orkambi_dom_stool, taxrank = "genus")
+
+```
+
+### Sputum
+
+```{r sputum dominant taxa}
+
+plots <- most_abundant_taxa(ps_orkambi_dom_sputum_glom, ps_orkambi_dom_sputum) 
+plots[1] # dominant genera cluster
+plots[2] # dominant genera cluster
+ps_orkambi_dom_sputum_glom <- plots[[3]]
+ps_orkambi_dom_sputum <- plots[[4]]
+plots[5] # dominant genera cluster
+
+dom_gen_sp_df <- data.frame(sample_data(ps_orkambi_dom_sputum_glom))
+dom_gen_sp_df <- dom_gen_sp_df %>%
+  select(c(visit, grouping, dominant_genus)) %>%
+  mutate(dominant_genus_16s = dominant_genus)
+dom_gen_sp_df$dominant_genus <- NULL
+
+#temp <- sample_data(ps_orkambi_dom_sputum_glom)
+
+temp_o <- clustered_heatmap_prep(ps_orkambi_dom_sputum_glom, ps_orkambi_dom_sputum)
+
+sp_ph <- clustered_heatmap(temp_o, map_o = sp_ph)
+sp_ph_o <- clustered_heatmap_ordered(temp_o, map_o = sp_ph_o)
+
+ggsave(file = "pheatmap_sp_16s.png", plot = sp_ph, width = 50, height = 40, dpi = 600, units = "cm")
+ggsave(file = "pheatmap_sp_16s_ord.png", plot = sp_ph_o, width = 50, height = 40, dpi = 600, units = "cm")
+
+
+
+```
+
+### Throat
+
+```{r throat dominant taxa}
+
+plots <- most_abundant_taxa(ps_orkambi_dom_throat_glom, ps_orkambi_dom_throat)
+plots[1]
+plots[2]
+ps_orkambi_dom_throat_glom <- plots[[3]]
+ps_orkambi_dom_throat <- plots[[4]]
+plots[5]
+
+dom_gen_th_df <- data.frame(sample_data(ps_orkambi_dom_throat_glom))
+dom_gen_th_df <- dom_gen_th_df %>%
+  select(c(visit, grouping, dominant_genus))%>%
+  mutate(dominant_genus_16s = dominant_genus)
+dom_gen_th_df$dominant_genus <- NULL
+
+temp_o2 <- clustered_heatmap_prep(ps_orkambi_dom_throat_glom, ps_orkambi_dom_throat)
+
+th_ph <- clustered_heatmap(temp_o2, map_o = th_ph)
+th_ph_o <- clustered_heatmap_ordered(temp_o2, map_o = th_ph_o)
+
+
+ggsave(file = "pheatmap_th_16s.png", plot = th_ph, width = 50, height = 40, dpi = 600, units = "cm")
+ggsave(file = "pheatmap_th_16s_ord.png", plot = th_ph_o, width = 50, height = 40, dpi = 600, units = "cm")
+
+```
+
+### Stool
+
+```{r stool dominant taxa}
+
+plots <- most_abundant_taxa(ps_orkambi_dom_stool_glom, ps_orkambi_dom_stool) 
+plots[1]
+plots[2]
+ps_orkambi_dom_stool_glom <- plots[[3]]
+ps_orkambi_dom_stool <- plots[[4]]
+plots[5]
+
+dom_gen_st_df <- data.frame(sample_data(ps_orkambi_dom_stool_glom))
+dom_gen_st_df <- dom_gen_st_df %>%
+  select(c(visit, grouping, dominant_genus))%>%
+  mutate(dominant_genus_16s = dominant_genus)
+dom_gen_st_df$dominant_genus <- NULL
+
+temp_o3 <- clustered_heatmap_prep(ps_orkambi_dom_stool_glom, ps_orkambi_dom_stool)
+
+st_ph <- clustered_heatmap(temp_o3, map_o = st_ph)
+st_ph_o <- clustered_heatmap_ordered(temp_o3, map_o = st_ph_o)
+
+
+ggsave(file = "pheatmap_st_16s.png", plot = st_ph, width = 50, height = 40, dpi = 600, units = "cm")
+ggsave(file = "pheatmap_st_16s_ord.png", plot = st_ph_o, width = 50, height = 40, dpi = 600, units = "cm")
+
+```
+
+
+## WGS Data
+
+All cluster by dominant Genus
+
+```{r load data wgs}
+
+ps_wgs_work <- readRDS("wgs_orkambi_trimmed.rds")
+ps_wgs_work_rel <- readRDS("wgs_orkambi_trimmed_relative.rds")
+
+```
+
+
+```{r prepare data}
+
+# relative abundance
+ps_wgs_rel_100 <- transform_sample_counts(ps_wgs_work, function(x) x/sum(x)*100) # Prozent
+
+# by material
+ps_wgs_dom_sputum <- subset_samples(ps_wgs_rel_100, material== "sputum")
+ps_wgs_dom_throat <- subset_samples(ps_wgs_rel_100, material== "throat")
+ps_wgs_dom_stool <- subset_samples(ps_wgs_rel_100, material== "stool")
+
+ps_wgs_dom_sputum_glom <- tax_glom(ps_wgs_dom_sputum, taxrank = "Genus")
+ps_wgs_dom_throat_glom <- tax_glom(ps_wgs_dom_throat, taxrank = "Genus")
+ps_wgs_dom_stool_glom <- tax_glom(ps_wgs_dom_stool, taxrank = "Genus")
+
+```
+
+
+### Sputum
+
+```{r sputum dominant taxa wgs}
+
+plots <- most_abundant_taxa_wgs(ps_wgs_dom_sputum_glom, ps_wgs_dom_sputum)
+plots[1]
+plots[2]
+ps_wgs_dom_sputum_glom <- plots[[3]]
+ps_wgs_dom_sputum <- plots[[4]]
+plots[5]
+plots[6]
+
+dom_gen_wgs_sp_df <- data.frame(sample_data(ps_wgs_dom_sputum_glom))
+dom_gen_wgs_sp_df <- dom_gen_wgs_sp_df %>%
+  select(c(label, dominant_genus))%>%
+  mutate(dominant_genus_wgs = dominant_genus)
+dom_gen_wgs_sp_df$dominant_genus <- NULL
+
+temp_o4 <- clustered_heatmap_wgs_prep(ps_wgs_dom_sputum_glom, ps_wgs_dom_sputum)
+
+sp_wgs_ph <- clustered_heatmap(temp_o4, map_o = sp_wgs_ph)
+sp_wgs_ph_o <- clustered_heatmap_ordered(temp_o4, map_o = sp_wgs_ph_o)
+
+
+ggsave(file = "pheatmap_sp_wgs.png", plot = sp_wgs_ph, width = 50, height = 40, dpi = 600, units = "cm")
+
+ggsave(file = "pheatmap_sp_wgs_ord.png", plot = sp_wgs_ph_o, width = 50, height = 40, dpi = 600, units = "cm")
+
+
+```
+
+### Throat
+
+```{r throat dominant taxa wgs}
+
+plots <- most_abundant_taxa_wgs(ps_wgs_dom_throat_glom, ps_wgs_dom_throat)
+plots[1]
+plots[2]
+ps_wgs_dom_throat_glom <- plots[[3]]
+ps_wgs_dom_throat <- plots[[4]]
+plots[5]
+plots[6]
+
+dom_gen_wgs_th_df <- data.frame(sample_data(ps_wgs_dom_throat_glom))
+dom_gen_wgs_th_df <- dom_gen_wgs_th_df %>%
+  select(c(label, dominant_genus))%>%
+  mutate(dominant_genus_wgs = dominant_genus)
+dom_gen_wgs_th_df$dominant_genus <- NULL
+
+
+temp_o5 <- clustered_heatmap_wgs_prep(ps_wgs_dom_throat_glom, ps_wgs_dom_throat)
+
+th_wgs_ph <- clustered_heatmap(temp_o5, map_o = th_wgs_ph)
+th_wgs_ph_o <- clustered_heatmap_ordered(temp_o5, map_o = th_wgs_ph_o)
+
+
+ggsave(file = "pheatmap_th_wgs.png", plot = th_wgs_ph, width = 50, height = 40, dpi = 600, units = "cm")
+
+ggsave(file = "pheatmap_th_wgs_ord.png", plot = th_wgs_ph_o, width = 50, height = 40, dpi = 600, units = "cm")
+
+
+```
+
+
+### Stool
+
+```{r stool dominant taxa wgs}
+
+plots <- most_abundant_taxa_wgs(ps_wgs_dom_stool_glom, ps_wgs_dom_stool)
+plots[1]
+plots[2]
+ps_wgs_dom_stool_glom <- plots[[3]]
+ps_wgs_dom_stool <- plots[[4]]
+plots[5]
+plots[6]
+
+dom_gen_wgs_st_df <- data.frame(sample_data(ps_wgs_dom_stool_glom))
+dom_gen_wgs_st_df <- dom_gen_wgs_st_df %>%
+  select(c(label, dominant_genus))%>%
+  mutate(dominant_genus_wgs = dominant_genus)
+dom_gen_wgs_st_df$dominant_genus <- NULL
+
+
+temp_o6 <- clustered_heatmap_wgs_prep(ps_wgs_dom_stool_glom, ps_wgs_dom_stool)
+
+st_wgs_ph <- clustered_heatmap(temp_o6, map_o = st_wgs_ph)
+st_wgs_ph_o <- clustered_heatmap_ordered(temp_o6, map_o = st_wgs_ph_o)
+
+
+ggsave(file = "pheatmap_st_wgs.png", plot = st_wgs_ph, width = 50, height = 40, dpi = 600, units = "cm")
+
+ggsave(file = "pheatmap_st_wgs_ord.png", plot = st_wgs_ph_o, width = 50, height = 40, dpi = 600, units = "cm")
+
+
+```
+
+## Comparison 
+
+```{R comparison function}
+
+dominant_genus_comp <- function(dom_gen_df, dom_gen_wgs_df) {
+
+dom_gen_df <- dom_gen_df %>%
+  mutate(label = tolower(grouping))
+dom_gen_df$grouping <- NULL
+
+#dom_gen_merged_df <- merge(x = dom_gen_df, y = dom_gen_wgs_df, by = "label", all.x = TRUE, all.y = TRUE)
+dom_gen_merged_df <- merge(x = dom_gen_df, y = dom_gen_wgs_df, by = "label")
+
+return(dom_gen_merged_df)
+
+}
+
+dominant_genus_equal <- function(dom_gen_merged_df) {
+  
+  dom_gen_merged_df <- dom_gen_merged_df %>%
+    mutate(genus_equal = case_when(
+      dominant_genus_16s == dominant_genus_wgs ~ 1,
+      #is.na(dominant_genus_16s) ~ NA_character_,
+      #is.na(dominant_genus_wgs) ~ NA_character_,
+      TRUE ~ 0
+    ))
+  
+  return(dom_gen_merged_df)
+}
+
+```
+
+```{r dominant genus per material}
+
+# sputum
+table(dom_gen_sp_df$dominant_genus_16s) # --> Streptococcus (4 different genera)
+table(dom_gen_wgs_sp_df$dominant_genus_wgs) # --> Staphylococcus (4 different genera)
+# from all sputum samples --> Streptococcus
+
+# throat
+table(dom_gen_th_df$dominant_genus_16s) # --> Streptococcus (9 different genera)
+table(dom_gen_wgs_th_df$dominant_genus_wgs) # --> Streptococcus (5 different genera)
+# from all throat samples --> Streptococcus
+
+# stool
+table(dom_gen_st_df$dominant_genus_16s) # --> Bacteroides (8 different genera)
+table(dom_gen_wgs_st_df$dominant_genus_wgs) # --> Bifidobacterium (10 different genera)
+# from all stool samples --> Bacteroisdes (even tho it is only in 16s data)
+
+```
+
+```{r comparison for all materials}
+
+# sputum
+dom_gen_sp_comp_df <- dominant_genus_comp(dom_gen_sp_df, dom_gen_wgs_sp_df)
+
+# throat
+dom_gen_th_comp_df <- dominant_genus_comp(dom_gen_th_df, dom_gen_wgs_th_df)
+
+# stool
+dom_gen_st_comp_df <- dominant_genus_comp(dom_gen_st_df, dom_gen_wgs_st_df)
+
+
+# wgs and 16s equal?
+dom_gen_sp_comp_df <- dominant_genus_equal(dom_gen_sp_comp_df)
+(sum(dom_gen_sp_comp_df$genus_equal)) / (nrow(dom_gen_sp_comp_df)) # 0,6666 --> 66,66% are equal
+dom_gen_th_comp_df <- dominant_genus_equal(dom_gen_th_comp_df)
+(sum(dom_gen_th_comp_df$genus_equal)) / (nrow(dom_gen_th_comp_df)) # 0,42 --> 42% are equal
+dom_gen_st_comp_df <- dominant_genus_equal(dom_gen_st_comp_df)
+(sum(dom_gen_st_comp_df$genus_equal)) / (nrow(dom_gen_st_comp_df)) # 0,3654 --> 36,54% are equal
+
+
+```
+
+```{r dom genus over visits}
+
+# sputum
+#dom_gen_sp_comp_df
+
+#throat
+dom_gen_th_comp_df %>%
+  arrange(visit)
+
+# stool
+dom_gen_st_comp_df %>%
+  arrange(visit)
+
+```
+
+
+## Alpha-Diversity Comparison
+
+```{r richness comp functions}
+
+
+richness_comp <- function(rich_16s, rich_wgs) {
+  
+  rich_16s <- data.frame(sapply(rich_16s, quantile))
+  colnames(rich_16s) <- c("observed_16s", "shannon_16s", "simpson_16s")
+  rownames(rich_16s) <- c("min", "q1", "median", "q3", "max")
+  
+  rich_wgs <- data.frame(sapply(rich_wgs, quantile))
+  colnames(rich_wgs) <- c("observed_wgs", "shannon_wgs", "simpson_wgs")
+  rownames(rich_wgs) <- c("min", "q1", "median", "q3", "max")
+  
+  rich_comp <-cbind(rich_16s, rich_wgs)
+  rich_comp <- rich_comp %>%
+    select(c(observed_16s, observed_wgs, shannon_16s, shannon_wgs, simpson_16s, simpson_wgs))
+  
+  rich_comp$observed_16s <- formattable(rich_comp$observed_16s,format="f",digits=2)
+  rich_comp$observed_wgs <- formattable(rich_comp$observed_wgs,format="f",digits=2)
+  
+  
+  return(rich_comp)
+  
+}
+
+```
+
+```{r alpha richness comp}
+
+# 16s prep
+ps_orkambi_sputum <- subset_samples(ps_orkambi_work, material == "Sputum")
+ps_orkambi_throat <- subset_samples(ps_orkambi_work, material == "Throat")
+ps_orkambi_stool <- subset_samples(ps_orkambi_work, material == "Stool")
+
+rich_16s_sp <- estimate_richness(ps_orkambi_sputum, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+rich_16s_th <- estimate_richness(ps_orkambi_throat, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+rich_16s_st <- estimate_richness(ps_orkambi_stool, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+
+
+# wgs prep
+ps_wgs_sputum <- subset_samples(ps_wgs_work, material == "sputum")
+ps_wgs_throat <- subset_samples(ps_wgs_work, material == "throat")
+ps_wgs_stool <- subset_samples(ps_wgs_work, material == "stool")
+
+rich_wgs_sp <- estimate_richness(ps_wgs_sputum, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+rich_wgs_th <- estimate_richness(ps_wgs_throat, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+rich_wgs_st <- estimate_richness(ps_wgs_stool, split = TRUE, measures = c("Observed", "Shannon", "Simpson"))
+
+
+# comparison
+rich_comp_sp <- richness_comp(rich_16s_sp, rich_wgs_sp)
+rich_comp_th <- richness_comp(rich_16s_th, rich_wgs_th)
+rich_comp_st <- richness_comp(rich_16s_st, rich_wgs_st)
+
+
+```
+
+
+## Microbiology
+
+```{r microbiology and dominant genus, eval=FALSE}
+
+microbiology_df <- data.frame(sample_data(ps_wgs_work))
+microbiology_df <- microbiology_df[!duplicated(microbiology_df[ , c("probe_id")]), ] 
+microbiology_df <- microbiology_df %>%
+  select(c(id, probe_id, sputum_lautropia_mirabilis:throat_stenotrophomonas_maltophilia)) 
+
+microbiology_df <- microbiology_df %>%
+  adorn_totals() %>%
+  data.frame()
+
+# patient 1 lautropia in sputum and throat, otherwise nothing
+# patient 7 everywhere 0
+microbiology_df %>%
+  filter(id == "1") %>%
+  adorn_totals() %>%
+  data.frame()
+
+# sputum
+microbiology_sp_df <- data.frame(sample_data(ps_wgs_work)) %>%
+  filter(material == "sputum") %>%
+  select(c(sputum_lautropia_mirabilis:sputum_escherichia_coli))
+
+#microbiology_sp_df <- microbiology_sp_df[!(row.names(microbiology_sp_df) %in% c("ttv2spu")), ]
+
+spu_16s <- c(0,1,1,1,1,0,1,0,0,1,1,1,0,1,1,1,1,1,1,1,0,0,0,0,0,1,0)
+spu_wgs <- c(0,0,0,0,0,0,0,0,0,1,1,1,0,1,1,0,1,1,1,1,0,0,0,0,0,1,0)
+
+dom_gen_sp_microb_df <- dom_gen_sp_comp_df %>%
+  mutate(microbio_16s = as.numeric(spu_16s)) %>%
+  mutate(microbio_wgs = as.numeric(spu_wgs))
+  
+dom_gen_sp_microb_df <- dom_gen_sp_microb_df[, c(1, 2, 5, 3, 6, 4)]
+
+#dom_gen_sp_microb_df <- dom_gen_sp_microb_df[!(row.names(dom_gen_sp_microb_df) %in% c("ttv2spu")), ]
+
+sum(dom_gen_sp_microb_df$microbio_16s)/27 # 62,96% of dominant genera verified in microbiology
+sum(dom_gen_sp_microb_df$microbio_wgs)/27 # 37,04% of dominant genera verified in microbiology
+
+micro_sp_16s_df <- dom_gen_sp_microb_df %>%
+  select(c(label, dominant_genus_16s, microbio_16s)) %>%
+  filter(dominant_genus_16s == "Streptococcus" | dominant_genus_16s =="Staphylococcus" | dominant_genus_16s == "Haemophilus" | dominant_genus_16s == "Nocardia")
+
+micro_sp_wgs_df <- dom_gen_sp_microb_df %>%
+  select(c(label, dominant_genus_wgs, microbio_wgs)) %>%
+  filter(dominant_genus_wgs == "Streptococcus" | dominant_genus_wgs =="Staphylococcus" | dominant_genus_wgs == "Haemophilus" | dominant_genus_wgs == "Nocardia")
+
+sum(micro_sp_16s_df$microbio_16s)/26 # 61,54%
+sum(micro_sp_wgs_df$microbio_wgs)/26 # 38,46%
+
+
+# throat
+microbiology_th_df <- data.frame(sample_data(ps_wgs_work)) %>%
+  filter(material == "throat") %>%
+  select(c(throat_moraxella_catarrhalis:throat_stenotrophomonas_maltophilia))
+
+microbiology_th_df <- microbiology_th_df[!(row.names(microbiology_th_df) %in% c("hdv5thr", "mlv5thr", "shv8thr")), ]
+
+thr_16s <- c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0)
+thr_wgs <- c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0)
+
+dom_gen_th_microb_df <- dom_gen_th_comp_df %>%
+  mutate(microbio_16s = thr_16s) %>%
+  mutate(microbio_wgs = thr_wgs)
+
+dom_gen_th_microb_df <- dom_gen_th_microb_df[, c(1, 2, 5, 3, 6, 4)]
+
+sum(dom_gen_th_microb_df$microbio_16s)/50 # 4,00% of dominant genera verified in microbiology
+sum(dom_gen_th_microb_df$microbio_wgs)/50 # 10,00% of dominant genera verified in microbiology
+
+micro_th_16s_df <- dom_gen_th_microb_df %>%
+  select(c(label, dominant_genus_16s, microbio_16s)) %>%
+  filter(dominant_genus_16s == "Streptococcus" | dominant_genus_16s =="Staphylococcus" | dominant_genus_16s == "Haemophilus" | dominant_genus_16s == "Nocardia")
+
+micro_th_wgs_df <- dom_gen_th_microb_df %>%
+  select(c(label, dominant_genus_wgs, microbio_wgs)) %>%
+  filter(dominant_genus_wgs == "Streptococcus" | dominant_genus_wgs =="Staphylococcus" | dominant_genus_wgs == "Haemophilus" | dominant_genus_wgs == "Nocardia")
+
+sum(micro_th_16s_df$microbio_16s)/24 # 8,0%
+sum(micro_th_wgs_df$microbio_wgs)/40 # 12,5%
+
+```
